@@ -1,0 +1,6 @@
+{
+  "name": "BEU VERIFY",
+  "description": "Secure bank receipt verification platform for Ethiopian banks and wallets with real-time QR code scanning.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

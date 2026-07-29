@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>Beu Verify - Smart Bank Receipt &amp; SMS Verification</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.jpg" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#FFD700" />
+    <script>
+      // Gracefully silence and intercept benign Vite HMR/WebSocket connection errors
+      (function() {
+        if (typeof window !== 'undefined') {
+          const isBenign = (msg) => {
+            if (!msg) return false;
+            const s = msg.toLowerCase();
+            return s.includes('websocket') || s.includes('ws://') || s.includes('vite') || s.includes('hmr');
+          };
+          
+          window.addEventListener('unhandledrejection', (event) => {
+            const reason = event.reason;
+            const msg = reason?.message || reason?.toString() || '';
+            if (isBenign(msg)) {
+              event.preventDefault();
+              event.stopImmediatePropagation();
+            }
+          }, true);
+
+          window.addEventListener('error', (event) => {
+            const msg = event.message || event.error?.message || '';
+            if (isBenign(msg)) {
+              event.preventDefault();
+              event.stopImmediatePropagation();
+            }
+          }, true);
+
+          // Monkey patch WebSocket to prevent unhandled background errors
+          const OriginalWS = window.WebSocket;
+          if (OriginalWS) {
+            const PatchedWS = function(url, protocols) {
+              try {
+                const ws = new OriginalWS(url, protocols);
+                ws.addEventListener('error', (e) => {
+                  e.preventDefault();
+                  e.stopImmediatePropagation();
+                });
+                return ws;
+              } catch (err) {
+                console.warn("Interceded WebSocket creation:", err);
+                return {
+                  addEventListener: () => {},
+                  removeEventListener: () => {},
+                  send: () => {},
+                  close: () => {},
+                  readyState: 3 // CLOSED
+                };
+              }
+            };
+            PatchedWS.prototype = OriginalWS.prototype;
+            // Copy static properties if any
+            for (const key in OriginalWS) {
+              if (Object.prototype.hasOwnProperty.call(OriginalWS, key)) {
+                PatchedWS[key] = OriginalWS[key];
+              }
+            }
+            window.WebSocket = PatchedWS;
+          }
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

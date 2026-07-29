@@ -1,0 +1,16 @@
+{
+  "short_name": "BeuVerify",
+  "name": "BeuVerify - Fintech Receipt Verification Node App",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#000000",
+  "theme_color": "#FFD700",
+  "display": "standalone",
+  "orientation": "portrait"
+}
