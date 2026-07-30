@@ -220,10 +220,10 @@ export default function AuthScreen({ onAuthSuccess, locale, t }: AuthScreenProps
   };
 
   return (
-    <div className="w-full flex-1 flex flex-col justify-center px-4 py-4 text-white font-sans">
+    <div className="w-full min-h-full flex-1 flex flex-col justify-start px-3 py-4 pb-24 text-white font-sans overflow-y-auto scrollbar-none">
       {/* Mini Thunder Brand Header */}
-      <div className="flex flex-col items-center mb-5 text-center">
-        <div className="w-12 h-12 bg-amber-400 rounded-2xl flex items-center justify-center text-black shadow-[0_0_25px_rgba(250,204,21,0.3)] mb-2.5">
+      <div className="flex flex-col items-center mb-5 text-center shrink-0">
+        <div className="w-13 h-13 bg-amber-400 rounded-2xl flex items-center justify-center text-black shadow-[0_0_25px_rgba(250,204,21,0.35)] mb-2.5 transition-transform hover:scale-105">
           <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7 fill-current" viewBox="0 0 24 24">
             <path d="M13 10V3L4 14h7v7l9-11h-7z" />
           </svg>
@@ -240,12 +240,14 @@ export default function AuthScreen({ onAuthSuccess, locale, t }: AuthScreenProps
         {!showCodeVerification ? (
           <motion.div
             key="auth-forms"
-            initial={{ opacity: 0, y: 10 }}
+            initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
+            exit={{ opacity: 0, y: -12 }}
+            transition={{ duration: 0.25, ease: "easeOut" }}
+            className="w-full max-w-md mx-auto"
           >
-            {/* Tab switchers */}
-            <div className="grid grid-cols-2 gap-1 bg-[#121212] p-1 rounded-lg border border-zinc-900 mb-6">
+            {/* Animated Tab Switchers */}
+            <div className="relative grid grid-cols-2 gap-1 bg-[#121215] p-1.5 rounded-xl border border-zinc-800/80 mb-5 shadow-inner">
               <button
                 type="button"
                 onClick={() => {
@@ -253,12 +255,17 @@ export default function AuthScreen({ onAuthSuccess, locale, t }: AuthScreenProps
                   setError(null);
                   setShowPassword(false);
                 }}
-                className={`py-2 text-xs font-bold uppercase tracking-wider rounded-md transition-all ${
-                  activeTab === "signin"
-                    ? "bg-amber-400 text-black shadow-md font-black"
-                    : "text-zinc-400 hover:text-white"
+                className={`relative z-10 py-2.5 text-xs font-bold uppercase tracking-wider rounded-lg transition-colors cursor-pointer ${
+                  activeTab === "signin" ? "text-black font-extrabold" : "text-zinc-400 hover:text-white"
                 }`}
               >
+                {activeTab === "signin" && (
+                  <motion.div
+                    layoutId="activeTabPill"
+                    className="absolute inset-0 bg-amber-400 rounded-lg shadow-md -z-10"
+                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                  />
+                )}
                 {locale === "am" ? "መግቢያ" : "LOGIN"}
               </button>
               <button
@@ -268,283 +275,319 @@ export default function AuthScreen({ onAuthSuccess, locale, t }: AuthScreenProps
                   setError(null);
                   setShowPassword(false);
                 }}
-                className={`py-2 text-xs font-bold uppercase tracking-wider rounded-md transition-all ${
-                  activeTab === "signup"
-                    ? "bg-amber-400 text-black shadow-md font-black"
-                    : "text-zinc-400 hover:text-white"
+                className={`relative z-10 py-2.5 text-xs font-bold uppercase tracking-wider rounded-lg transition-colors cursor-pointer ${
+                  activeTab === "signup" ? "text-black font-extrabold" : "text-zinc-400 hover:text-white"
                 }`}
               >
+                {activeTab === "signup" && (
+                  <motion.div
+                    layoutId="activeTabPill"
+                    className="absolute inset-0 bg-amber-400 rounded-lg shadow-md -z-10"
+                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                  />
+                )}
                 {locale === "am" ? "አዲስ ምዝገባ" : "CREATE ACCOUNT"}
               </button>
             </div>
 
             {/* Error/Success alerts */}
-            {error && (
-              <div className="p-3 mb-4 bg-red-950/40 border border-red-900/50 text-red-200 text-xs rounded-lg flex items-start gap-2">
-                <AlertCircle size={15} className="text-red-400 shrink-0 mt-0.5" />
-                <span>{error}</span>
-              </div>
-            )}
-            {success && (
-              <div className="p-3 mb-4 bg-emerald-950/40 border border-emerald-900/50 text-emerald-200 text-xs rounded-lg flex items-start gap-2">
-                <CheckCircle2 size={15} className="text-emerald-400 shrink-0 mt-0.5" />
-                <span>{success}</span>
-              </div>
-            )}
-
-            {/* Forms */}
-            {activeTab === "signin" ? (
-              <form onSubmit={handleSignIn} className="space-y-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1.5">
-                    {locale === "am" ? "የኢሜል አድራሻ" : "Email Address"}
-                  </label>
-                  <div className="relative">
-                    <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-500">
-                      <Mail size={15} />
-                    </span>
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="business@example.com"
-                      className="w-full bg-[#121212] border border-zinc-800 focus:border-amber-400 rounded-lg pl-9 pr-3 py-2.5 text-base sm:text-sm text-white placeholder-zinc-600 focus:outline-none transition-all"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1.5">
-                    {locale === "am" ? "የይለፍ ቃል" : "Password"}
-                  </label>
-                  <div className="relative">
-                    <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-500">
-                      <Lock size={15} />
-                    </span>
-                    <input
-                      type={showPassword ? "text" : "password"}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••"
-                      className="w-full bg-[#121212] border border-zinc-800 focus:border-amber-400 rounded-lg pl-9 pr-10 py-2.5 text-base sm:text-sm text-white placeholder-zinc-600 focus:outline-none transition-all font-mono"
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute inset-y-0 right-0 flex items-center pr-3 text-zinc-500 hover:text-amber-400 transition-colors"
-                    >
-                      {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                    </button>
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className="w-full bg-amber-400 hover:bg-amber-500 disabled:bg-amber-400/40 text-black font-extrabold uppercase tracking-wider py-3 px-4 rounded-lg text-xs mt-3 flex items-center justify-center gap-1.5 shadow-[0_4px_20px_rgba(245,158,11,0.15)] active:scale-95 transition-all cursor-pointer"
+            <AnimatePresence mode="wait">
+              {error && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="p-3 mb-4 bg-red-950/40 border border-red-900/50 text-red-200 text-xs rounded-xl flex items-start gap-2.5 shadow-sm"
                 >
-                  {isLoading ? (
-                    <span className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <>
-                      {locale === "am" ? "ግባ" : "LOGIN TO WORKSPACE"}
-                      <ArrowRight size={14} />
-                    </>
-                  )}
-                </button>
-              </form>
-            ) : (
-              <form onSubmit={handleSignUp} className="space-y-4">
-                {/* Business Name */}
-                <div>
-                  <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1.5">
-                    {locale === "am" ? "የድርጅት ስም (የንግድ ስም)" : "Business Name"}
-                  </label>
-                  <div className="relative">
-                    <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-500">
-                      <Building2 size={14} />
-                    </span>
-                    <input
-                      type="text"
-                      value={businessName}
-                      onChange={(e) => setBusinessName(e.target.value)}
-                      placeholder="e.g. BEU Restaurant"
-                      className="w-full bg-[#121212] border border-zinc-800 focus:border-amber-400 rounded-lg pl-9 pr-3 py-2 text-base sm:text-sm text-white placeholder-zinc-600 focus:outline-none transition-all"
-                      required
-                    />
-                  </div>
-                </div>
+                  <AlertCircle size={16} className="text-red-400 shrink-0 mt-0.5" />
+                  <span>{error}</span>
+                </motion.div>
+              )}
+              {success && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="p-3 mb-4 bg-emerald-950/40 border border-emerald-900/50 text-emerald-200 text-xs rounded-xl flex items-start gap-2.5 shadow-sm"
+                >
+                  <CheckCircle2 size={16} className="text-emerald-400 shrink-0 mt-0.5" />
+                  <span>{success}</span>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
-                {/* Business Type */}
-                <div>
-                  <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1.5">
-                    {locale === "am" ? "የንግድ አይነት" : "Business Type"}
-                  </label>
-                  <select
-                    value={businessType}
-                    onChange={(e) => setBusinessType(e.target.value)}
-                    className="w-full bg-[#121212] border border-zinc-800 focus:border-amber-400 rounded-lg px-3 py-2.5 text-base sm:text-xs text-zinc-300 focus:outline-none transition-all"
-                    required
-                  >
-                    <option value="">{locale === "am" ? "-- ንግድ አይነት ይምረጡ --" : "-- Select Business Type --"}</option>
-                    {BUSINESS_TYPES.map(type => (
-                      <option key={type} value={type}>
-                        {locale === "am" ? (AMHARIC_BUSINESS_TYPES[type] || type) : type}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Custom Business Type input if 'Other' is chosen */}
-                {businessType === "Other" && (
+            {/* Smooth Tab Forms Transition */}
+            <AnimatePresence mode="wait">
+              {activeTab === "signin" ? (
+                <motion.form
+                  key="signin-form"
+                  initial={{ opacity: 0, x: -16 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 16 }}
+                  transition={{ duration: 0.2 }}
+                  onSubmit={handleSignIn}
+                  className="space-y-4"
+                >
                   <div>
-                    <label className="block text-[10px] font-bold text-amber-400 uppercase tracking-wider mb-1.5">
-                      {locale === "am" ? "እባክዎ ንግድ አይነትዎን ይግለጹ" : "Specify Business Type"}
+                    <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1.5">
+                      {locale === "am" ? "የኢሜል አድራሻ" : "Email Address"}
                     </label>
-                    <input
-                      type="text"
-                      value={customBusinessType}
-                      onChange={(e) => setCustomBusinessType(e.target.value)}
-                      placeholder="e.g. Boutique, Delivery service"
-                      className="w-full bg-[#121212] border border-amber-400/50 focus:border-amber-400 rounded-lg px-3 py-2 text-base sm:text-sm text-white placeholder-zinc-600 focus:outline-none transition-all animate-pulse"
-                      required
-                    />
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-zinc-500">
+                        <Mail size={16} />
+                      </span>
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="business@example.com"
+                        className="w-full bg-[#121215] border border-zinc-800 focus:border-amber-400 rounded-xl pl-10 pr-3.5 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-amber-400/50 transition-all"
+                        required
+                      />
+                    </div>
                   </div>
-                )}
 
-                {/* Owner Name */}
-                <div>
-                  <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1.5">
-                    {locale === "am" ? "የባለቤቱ ስም" : "Owner Name"}
-                  </label>
-                  <div className="relative">
-                    <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-500">
-                      <UserIcon size={14} />
-                    </span>
-                    <input
-                      type="text"
-                      value={ownerName}
-                      onChange={(e) => setOwnerName(e.target.value)}
-                      placeholder="e.g. Abebe Balcha"
-                      className="w-full bg-[#121212] border border-zinc-800 focus:border-amber-400 rounded-lg pl-9 pr-3 py-2 text-base sm:text-sm text-white placeholder-zinc-600 focus:outline-none transition-all"
-                      required
-                    />
+                  <div>
+                    <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1.5">
+                      {locale === "am" ? "የይለፍ ቃል" : "Password"}
+                    </label>
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-zinc-500">
+                        <Lock size={16} />
+                      </span>
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className="w-full bg-[#121215] border border-zinc-800 focus:border-amber-400 rounded-xl pl-10 pr-10 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-amber-400/50 transition-all font-mono"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute inset-y-0 right-0 flex items-center pr-3.5 text-zinc-500 hover:text-amber-400 transition-colors cursor-pointer"
+                      >
+                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
                   </div>
-                </div>
 
-                {/* Email */}
-                <div>
-                  <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1.5">
-                    {locale === "am" ? "የኢሜል አድራሻ" : "Email Address"}
-                  </label>
-                  <div className="relative">
-                    <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-500">
-                      <Mail size={14} />
-                    </span>
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="owner@yourcompany.com"
-                      className="w-full bg-[#121212] border border-zinc-800 focus:border-amber-400 rounded-lg pl-9 pr-3 py-2 text-base sm:text-sm text-white placeholder-zinc-600 focus:outline-none transition-all"
-                      required
-                    />
-                  </div>
-                </div>
-
-                {/* Phone */}
-                <div>
-                  <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1.5">
-                    {locale === "am" ? "የስልክ ቁጥር" : "Phone Number"}
-                  </label>
-                  <div className="relative">
-                    <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-500">
-                      <Phone size={14} />
-                    </span>
-                    <input
-                      type="tel"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="e.g. 0912345678"
-                      className="w-full bg-[#121212] border border-zinc-800 focus:border-amber-400 rounded-lg pl-9 pr-3 py-2 text-base sm:text-sm text-white placeholder-zinc-600 focus:outline-none transition-all"
-                      required
-                    />
-                  </div>
-                </div>
-
-                {/* Password */}
-                <div>
-                  <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1.5">
-                    {locale === "am" ? "የይለፍ ቃል" : "Password"}
-                  </label>
-                  <div className="relative">
-                    <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-500">
-                      <Lock size={14} />
-                    </span>
-                    <input
-                      type={showPassword ? "text" : "password"}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Create secure password"
-                      className="w-full bg-[#121212] border border-zinc-800 focus:border-amber-400 rounded-lg pl-9 pr-10 py-2 text-base sm:text-sm text-white placeholder-zinc-600 focus:outline-none transition-all font-mono"
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute inset-y-0 right-0 flex items-center pr-3 text-zinc-500 hover:text-amber-400 transition-colors"
-                    >
-                      {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
-                    </button>
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className="w-full bg-amber-400 hover:bg-amber-500 disabled:bg-amber-400/40 text-black font-extrabold uppercase tracking-wider py-3 px-4 rounded-lg text-xs mt-3 flex items-center justify-center gap-1.5 shadow-[0_4px_20px_rgba(245,158,11,0.15)] active:scale-95 transition-all cursor-pointer"
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full bg-amber-400 hover:bg-amber-300 disabled:bg-amber-400/40 text-black font-extrabold uppercase tracking-wider py-3.5 px-4 rounded-xl text-xs mt-4 flex items-center justify-center gap-2 shadow-[0_4px_20px_rgba(245,158,11,0.2)] active:scale-[0.98] transition-all cursor-pointer"
+                  >
+                    {isLoading ? (
+                      <span className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        {locale === "am" ? "ግባ" : "LOGIN TO WORKSPACE"}
+                        <ArrowRight size={15} />
+                      </>
+                    )}
+                  </button>
+                </motion.form>
+              ) : (
+                <motion.form
+                  key="signup-form"
+                  initial={{ opacity: 0, x: 16 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -16 }}
+                  transition={{ duration: 0.2 }}
+                  onSubmit={handleSignUp}
+                  className="space-y-4"
                 >
-                  {isLoading ? (
-                    <span className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <>
-                      {locale === "am" ? "አሁን ይመዝገቡ" : "PROCEED TO VERIFICATION"}
-                      <ArrowRight size={14} />
-                    </>
+                  {/* Business Name */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1.5">
+                      {locale === "am" ? "የድርጅት ስም (የንግድ ስም)" : "Business Name"}
+                    </label>
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-zinc-500">
+                        <Building2 size={16} />
+                      </span>
+                      <input
+                        type="text"
+                        value={businessName}
+                        onChange={(e) => setBusinessName(e.target.value)}
+                        placeholder="e.g. BEU Restaurant"
+                        className="w-full bg-[#121215] border border-zinc-800 focus:border-amber-400 rounded-xl pl-10 pr-3.5 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-amber-400/50 transition-all"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* Business Type */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1.5">
+                      {locale === "am" ? "የንግድ አይነት" : "Business Type"}
+                    </label>
+                    <select
+                      value={businessType}
+                      onChange={(e) => setBusinessType(e.target.value)}
+                      className="w-full bg-[#121215] border border-zinc-800 focus:border-amber-400 rounded-xl px-3.5 py-3 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-amber-400/50 transition-all cursor-pointer"
+                      required
+                    >
+                      <option value="">{locale === "am" ? "-- ንግድ አይነት ይምረጡ --" : "-- Select Business Type --"}</option>
+                      {BUSINESS_TYPES.map(type => (
+                        <option key={type} value={type} className="bg-zinc-900 text-white">
+                          {locale === "am" ? (AMHARIC_BUSINESS_TYPES[type] || type) : type}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Custom Business Type input if 'Other' is chosen */}
+                  {businessType === "Other" && (
+                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}>
+                      <label className="block text-[10px] font-bold text-amber-400 uppercase tracking-wider mb-1.5">
+                        {locale === "am" ? "እባክዎ ንግድ አይነትዎን ይግለጹ" : "Specify Business Type"}
+                      </label>
+                      <input
+                        type="text"
+                        value={customBusinessType}
+                        onChange={(e) => setCustomBusinessType(e.target.value)}
+                        placeholder="e.g. Boutique, Delivery service"
+                        className="w-full bg-[#121215] border border-amber-400/60 focus:border-amber-400 rounded-xl px-3.5 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none transition-all"
+                        required
+                      />
+                    </motion.div>
                   )}
-                </button>
-              </form>
-            )}
+
+                  {/* Owner Name */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1.5">
+                      {locale === "am" ? "የባለቤቱ ስም" : "Owner Name"}
+                    </label>
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-zinc-500">
+                        <UserIcon size={16} />
+                      </span>
+                      <input
+                        type="text"
+                        value={ownerName}
+                        onChange={(e) => setOwnerName(e.target.value)}
+                        placeholder="e.g. Abebe Balcha"
+                        className="w-full bg-[#121215] border border-zinc-800 focus:border-amber-400 rounded-xl pl-10 pr-3.5 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-amber-400/50 transition-all"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* Email */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1.5">
+                      {locale === "am" ? "የኢሜል አድራሻ" : "Email Address"}
+                    </label>
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-zinc-500">
+                        <Mail size={16} />
+                      </span>
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="owner@yourcompany.com"
+                        className="w-full bg-[#121215] border border-zinc-800 focus:border-amber-400 rounded-xl pl-10 pr-3.5 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-amber-400/50 transition-all"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* Phone */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1.5">
+                      {locale === "am" ? "የስልክ ቁጥር" : "Phone Number"}
+                    </label>
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-zinc-500">
+                        <Phone size={16} />
+                      </span>
+                      <input
+                        type="tel"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        placeholder="e.g. 0912345678"
+                        className="w-full bg-[#121215] border border-zinc-800 focus:border-amber-400 rounded-xl pl-10 pr-3.5 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-amber-400/50 transition-all"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* Password */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1.5">
+                      {locale === "am" ? "የይለፍ ቃል" : "Password"}
+                    </label>
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-zinc-500">
+                        <Lock size={16} />
+                      </span>
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Create secure password"
+                        className="w-full bg-[#121215] border border-zinc-800 focus:border-amber-400 rounded-xl pl-10 pr-10 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-amber-400/50 transition-all font-mono"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute inset-y-0 right-0 flex items-center pr-3.5 text-zinc-500 hover:text-amber-400 transition-colors cursor-pointer"
+                      >
+                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full bg-amber-400 hover:bg-amber-300 disabled:bg-amber-400/40 text-black font-extrabold uppercase tracking-wider py-3.5 px-4 rounded-xl text-xs mt-4 flex items-center justify-center gap-2 shadow-[0_4px_20px_rgba(245,158,11,0.2)] active:scale-[0.98] transition-all cursor-pointer"
+                  >
+                    {isLoading ? (
+                      <span className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        {locale === "am" ? "አሁን ይመዝገቡ" : "PROCEED TO VERIFICATION"}
+                        <ArrowRight size={15} />
+                      </>
+                    )}
+                  </button>
+                </motion.form>
+              )}
+            </AnimatePresence>
           </motion.div>
         ) : (
           <motion.div
             key="code-verification"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="flex flex-col gap-4 text-center"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.25 }}
+            className="flex flex-col gap-4 text-center max-w-md mx-auto w-full"
           >
             <div className="flex justify-center text-amber-400 mb-1">
-              <ShieldCheck size={40} className="animate-pulse" />
+              <ShieldCheck size={44} className="animate-pulse" />
             </div>
             <h3 className="text-lg font-bold">
               {locale === "am" ? "ኢሜልዎን ያረጋግጡ" : "Email Verification Code Required"}
             </h3>
-            <p className="text-xs text-zinc-400 leading-relaxed max-w-[280px] mx-auto">
+            <p className="text-xs text-zinc-400 leading-relaxed max-w-[290px] mx-auto">
               {locale === "am" ? `የ 6 ዲጂት ኮድ ወደ ${emailForVerification} ልከናል። እባክዎ ከታች ያስገቡ።` : `We sent a 6-digit confirmation key to ${emailForVerification}. Enter it below to unlock your setup.`}
             </p>
 
             {error && (
-              <div className="p-3 bg-red-950/40 border border-red-900/50 text-red-200 text-xs rounded-lg flex items-start gap-2 text-left">
-                <AlertCircle size={15} className="text-red-400 shrink-0 mt-0.5" />
+              <div className="p-3 bg-red-950/40 border border-red-900/50 text-red-200 text-xs rounded-xl flex items-start gap-2.5 text-left">
+                <AlertCircle size={16} className="text-red-400 shrink-0 mt-0.5" />
                 <span>{error}</span>
               </div>
             )}
             {success && (
-              <div className="p-3 bg-emerald-950/40 border border-emerald-900/50 text-emerald-200 text-xs rounded-lg flex items-start gap-2 text-left">
-                <CheckCircle2 size={15} className="text-emerald-400 shrink-0 mt-0.5" />
+              <div className="p-3 bg-emerald-950/40 border border-emerald-900/50 text-emerald-200 text-xs rounded-xl flex items-start gap-2.5 text-left">
+                <CheckCircle2 size={16} className="text-emerald-400 shrink-0 mt-0.5" />
                 <span>{success}</span>
               </div>
             )}
@@ -560,7 +603,7 @@ export default function AuthScreen({ onAuthSuccess, locale, t }: AuthScreenProps
                   value={verificationCode}
                   onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ""))}
                   placeholder="000000"
-                  className="w-full bg-[#121212] border border-zinc-800 focus:border-amber-400 text-center text-2xl font-black tracking-widest rounded-lg py-3 focus:outline-none transition-all placeholder-zinc-800 text-white font-mono"
+                  className="w-full bg-[#121215] border border-zinc-800 focus:border-amber-400 text-center text-2xl font-black tracking-widest rounded-xl py-3.5 focus:outline-none transition-all placeholder-zinc-800 text-white font-mono focus:ring-2 focus:ring-amber-400/40"
                   required
                 />
               </div>
@@ -568,26 +611,27 @@ export default function AuthScreen({ onAuthSuccess, locale, t }: AuthScreenProps
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full bg-amber-400 hover:bg-amber-500 disabled:bg-amber-400/40 text-black font-extrabold uppercase tracking-wider py-3 px-4 rounded-lg text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer shadow-[0_4px_20px_rgba(245,158,11,0.2)]"
+                className="w-full bg-amber-400 hover:bg-amber-300 disabled:bg-amber-400/40 text-black font-extrabold uppercase tracking-wider py-3.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2 active:scale-[0.98] transition-all cursor-pointer shadow-[0_4px_20px_rgba(245,158,11,0.2)]"
               >
                 {isLoading ? (
                   <span className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
                 ) : (
                   <>
                     {locale === "am" ? "ኮዱን አረጋግጥ" : "CONFIRM VERIFICATION KEY"}
-                    <CheckCircle2 size={14} />
+                    <CheckCircle2 size={16} />
                   </>
                 )}
               </button>
             </form>
 
             <button
+              type="button"
               onClick={() => {
                 setShowCodeVerification(false);
                 setError(null);
                 setSuccess(null);
               }}
-              className="text-[10px] text-zinc-500 hover:text-zinc-300 underline mt-2"
+              className="text-xs text-zinc-400 hover:text-amber-400 underline mt-2 cursor-pointer transition-colors"
             >
               {locale === "am" ? "ወደ ኋላ ይመለሱ" : "Go back to register details"}
             </button>

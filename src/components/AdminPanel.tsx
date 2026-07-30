@@ -187,42 +187,42 @@ export default function AdminPanel({ adminUser, onGoBack, locale }: AdminPanelPr
   };
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-4 py-8 text-white space-y-8">
+    <div className="w-full max-w-md mx-auto p-2 sm:p-4 text-white space-y-4 font-sans overflow-x-hidden">
       {/* Top Admin Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-zinc-950 border border-amber-400/20 p-5 rounded-2xl shadow-xl">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-amber-400 rounded-xl flex items-center justify-center text-black shadow-lg shadow-amber-400/10">
-            <Shield size={24} />
-          </div>
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-amber-400 text-[10px] font-black uppercase tracking-widest bg-amber-400/10 px-2 py-0.5 rounded-full">
-                ADMIN GOD MODE
-              </span>
+      <div className="flex flex-col gap-2 bg-zinc-950 border border-amber-400/20 p-3.5 rounded-2xl shadow-xl">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 bg-amber-400 rounded-xl flex items-center justify-center text-black shadow-lg shadow-amber-400/10 shrink-0">
+              <Shield size={20} />
             </div>
-            <h1 className="text-xl sm:text-2xl font-black text-white font-display mt-1">
-              Beu Verify Central Operations
-            </h1>
+            <div>
+              <div className="flex items-center gap-1">
+                <span className="text-amber-400 text-[8px] font-black uppercase tracking-widest bg-amber-400/10 px-1.5 py-0.5 rounded-full">
+                  ADMIN GOD MODE
+                </span>
+              </div>
+              <h1 className="text-sm font-black text-white font-display leading-tight">
+                Beu Central Operations
+              </h1>
+            </div>
           </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowIntegrations(true)}
-            className="bg-amber-400 hover:bg-amber-300 text-black px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer shadow-lg shadow-amber-400/20"
-          >
-            <Zap size={15} className="fill-black" />
-            Supabase & Brevo Node
-          </button>
 
           <button
             onClick={onGoBack}
-            className="bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer"
+            className="bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white p-2 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0"
+            title="Back"
           >
-            <ArrowLeft size={14} />
-            Back to Verification Tool
+            <ArrowLeft size={16} />
           </button>
         </div>
+
+        <button
+          onClick={() => setShowIntegrations(true)}
+          className="w-full bg-amber-400 hover:bg-amber-300 text-black py-2 rounded-xl text-[11px] font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-md"
+        >
+          <Zap size={14} className="fill-black" />
+          <span>Supabase & Brevo Node</span>
+        </button>
       </div>
 
       {/* Global Alerts */}
@@ -237,11 +237,11 @@ export default function AdminPanel({ adminUser, onGoBack, locale }: AdminPanelPr
         </div>
       )}
 
-      {/* Grid Layout: Config Mother API (Left) + Users (Right/Main) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      {/* Layout: Config Mother API + Users */}
+      <div className="flex flex-col gap-4">
         
         {/* API Config Sidebar */}
-        <div className="lg:col-span-4 space-y-6">
+        <div className="w-full space-y-4">
           <div className="bg-[#0a0a0a] border border-zinc-800 rounded-2xl p-5 space-y-5 shadow-lg">
             <div className="flex items-center gap-2 border-b border-zinc-900 pb-3">
               <Key size={18} className="text-amber-400" />

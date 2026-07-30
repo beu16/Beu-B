@@ -13,6 +13,7 @@ export enum VerificationStatus {
 }
 
 export interface VerificationLog {
+  id?: string;
   requestId: string;
   bank: string;
   reference: string;

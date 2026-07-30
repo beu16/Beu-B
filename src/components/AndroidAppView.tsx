@@ -34,9 +34,11 @@ import {
   Shield,
   FileText,
   Moon,
+  Sun,
   Globe,
   Fingerprint,
-  Mail
+  Mail,
+  Info
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -56,14 +58,14 @@ interface AndroidAppViewProps {
   locale: Locale;
   onLanguageChange: (lang: Locale) => void;
   logs: VerificationLog[];
-  onVerifyReference?: (ref: string, bank: string) => void;
+  onVerifyReference?: (ref: string, bank: string, suffix?: string, phoneNumber?: string) => void;
   currentVerification: ActiveVerification | null;
   setCurrentVerification: (v: ActiveVerification | null) => void;
   isLoadingVerification?: boolean;
 }
 
 export type AndroidTab = "home" | "history" | "scan" | "analytics" | "profile";
-export type AndroidSubScreen = "none" | "splash" | "onboarding" | "topup" | "settings" | "result" | "empty";
+export type AndroidSubScreen = "none" | "splash" | "onboarding" | "topup" | "settings" | "result" | "empty" | "about" | "privacy" | "terms";
 
 export default function AndroidAppView({
   user,
@@ -76,14 +78,19 @@ export default function AndroidAppView({
   setCurrentVerification,
   isLoadingVerification = false
 }: AndroidAppViewProps) {
+  const t = TRANSLATIONS[locale] || TRANSLATIONS.en;
+
   // Navigation States
   const [activeTab, setActiveTab] = useState<AndroidTab>("home");
   const [subScreen, setSubScreen] = useState<AndroidSubScreen>("none");
   const [showDrawer, setShowDrawer] = useState(false);
   
-  // Top Up Credits state
-  const [selectedCreditsAmount, setSelectedCreditsAmount] = useState<number>(20);
+  // Package & Subscription state
+  const [activePlan, setActivePlan] = useState<string>("Pro");
+  const [selectedPackage, setSelectedPackage] = useState<{ credits: number; etb: number; plan: string }>({ credits: 50, etb: 500, plan: "Pro" });
+  const [userCredits, setUserCredits] = useState<number>(user?.credits ?? 999999);
   const [paymentMethod, setPaymentMethod] = useState<"mobile" | "bank">("mobile");
+  const [telebirrRefInput, setTelebirrRefInput] = useState("");
   
   // Settings toggles state
   const [darkMode, setDarkMode] = useState(true);
@@ -95,9 +102,9 @@ export default function AndroidAppView({
   const [historySearch, setHistorySearch] = useState("");
   const [historyFilter, setHistoryFilter] = useState<"all" | "today" | "yesterday">("all");
 
-  // Biometric & PIN Lock Modal State
-  const [showSecurityModal, setShowSecurityModal] = useState(false);
-  const [securityModalMode, setSecurityModalMode] = useState<"unlock" | "setup">("setup");
+  // Biometric & PIN Lock Modal State - Starts locked on app open every time
+  const [showSecurityModal, setShowSecurityModal] = useState(true);
+  const [securityModalMode, setSecurityModalMode] = useState<"unlock" | "setup">("unlock");
   const [sendingBrevoReceipt, setSendingBrevoReceipt] = useState(false);
 
   // Helper function to dispatch receipt via Brevo
@@ -122,8 +129,7 @@ export default function AndroidAppView({
 
   // User details fallback
   const userName = user?.ownerName || user?.businessName || "abc";
-  const userRole = user?.isAdmin ? "Admin Node" : "Starter Node";
-  const userCredits = user?.credits ?? 20;
+  const userRole = user?.isAdmin ? "Admin Node" : `${activePlan} Node`;
 
   // Pre-populated transactions if logs empty
   const sampleTransactions = [
@@ -157,7 +163,7 @@ export default function AndroidAppView({
   };
 
   const handleOpenScan = () => {
-    handleOpenScanCamera();
+    handleOpenManual();
   };
 
   // Switch tab & clear subscreen
@@ -167,33 +173,48 @@ export default function AndroidAppView({
   };
 
   return (
-    <div className="w-full h-full bg-[#070709] text-zinc-100 flex flex-col justify-between relative overflow-hidden select-none font-sans">
+    <div className={`w-full h-screen h-[100dvh] flex flex-col justify-between relative select-none font-sans transition-colors duration-300 overflow-hidden ${
+      darkMode ? "bg-[#070709] text-zinc-100" : "bg-slate-100 text-slate-900"
+    }`}>
       
       {/* 1. TOP HEADER */}
-      <div className="w-full bg-[#08080A] border-b border-zinc-900/80 px-2.5 py-2 flex items-center justify-between shrink-0 z-20">
+      <div className={`w-full border-b px-3 py-2.5 flex items-center justify-between shrink-0 z-30 backdrop-blur-md ${
+        darkMode ? "bg-[#08080A]/95 border-zinc-900/80" : "bg-white/95 border-slate-200 text-slate-900 shadow-sm"
+      }`}>
         {/* Left: Menu Drawer Trigger & Brand Logo */}
-        <div className="flex items-center gap-1.5 min-w-0">
+        <div className="flex items-center gap-2 shrink-0">
           <button 
-            onClick={() => setShowDrawer(true)}
-            className="p-1 hover:bg-zinc-800/80 rounded-lg text-zinc-300 transition-colors shrink-0"
+            type="button"
+            id="menu-drawer-button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setShowDrawer(true);
+            }}
+            className={`p-1.5 rounded-lg transition-all shrink-0 cursor-pointer active:scale-95 z-30 pointer-events-auto flex items-center justify-center ${
+              darkMode ? "bg-zinc-900/80 hover:bg-zinc-800 text-zinc-200 border border-zinc-800" : "bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300"
+            }`}
             title="Open Menu Drawer"
+            aria-label="Open Navigation Drawer"
           >
-            <div className="w-4 flex flex-col gap-0.5">
-              <span className="w-4 h-0.5 bg-zinc-200 rounded-full" />
+            <div className="w-4 flex flex-col gap-0.5 pointer-events-none">
+              <span className={`w-4 h-0.5 rounded-full ${darkMode ? "bg-zinc-200" : "bg-slate-800"}`} />
               <span className="w-2.5 h-0.5 bg-[#FFD700] rounded-full" />
-              <span className="w-4 h-0.5 bg-zinc-200 rounded-full" />
+              <span className={`w-4 h-0.5 rounded-full ${darkMode ? "bg-zinc-200" : "bg-slate-800"}`} />
             </div>
           </button>
 
           <div 
             onClick={() => handleTabSelect("home")}
-            className="flex items-center gap-1.5 cursor-pointer truncate"
+            className="flex items-center gap-1.5 cursor-pointer shrink-0"
           >
             <div className="w-6 h-6 bg-[#FFD700] rounded-full flex items-center justify-center text-black shadow-[0_0_10px_rgba(255,215,0,0.35)] shrink-0">
               <Zap size={13} className="fill-black" />
             </div>
-            <h1 className="font-black text-xs tracking-tight text-white leading-none font-display truncate">
-              Beu<span className="text-[#FFD700]">Verify</span>
+            <h1 className={`font-black text-xs sm:text-sm tracking-tight leading-none font-display whitespace-nowrap ${
+              darkMode ? "text-white" : "text-slate-900"
+            }`}>
+              Beu<span className="text-amber-500">Verify</span>
             </h1>
           </div>
         </div>
@@ -203,36 +224,51 @@ export default function AndroidAppView({
           {/* Credits Box */}
           <button 
             onClick={() => setSubScreen("topup")}
-            className="flex items-center gap-1 bg-[#121215] border border-zinc-800/80 px-1.5 py-0.5 rounded-lg text-left transition-all cursor-pointer hover:border-amber-400/50"
+            className={`flex items-center gap-1 border px-1.5 py-0.5 rounded-lg text-left transition-all cursor-pointer ${
+              darkMode 
+                ? "bg-[#121215] border-zinc-800/80 hover:border-amber-400/50" 
+                : "bg-slate-100 border-slate-300 hover:border-amber-500"
+            }`}
           >
-            <Coins size={11} className="text-amber-400 shrink-0" />
+            <Coins size={11} className="text-amber-500 shrink-0" />
             <div className="flex items-baseline gap-0.5">
-              <span className="text-[8px] text-zinc-400">Credits</span>
-              <span className="text-[11px] font-black text-white font-mono">{userCredits}</span>
+              <span className={`text-[8px] ${darkMode ? "text-zinc-400" : "text-slate-500"}`}>Credits</span>
+              <span className={`text-[11px] font-black font-mono ${darkMode ? "text-white" : "text-slate-900"}`}>{userCredits}</span>
             </div>
           </button>
 
           {/* Language Dropdown */}
           <button 
             onClick={() => onLanguageChange(locale === "en" ? "am" : "en")}
-            className="flex items-center gap-0.5 bg-[#121215] border border-zinc-800/80 px-1.5 py-1 rounded-lg text-[10px] text-zinc-300 font-medium hover:text-white"
+            className={`flex items-center gap-0.5 border px-1.5 py-1 rounded-lg text-[10px] font-bold ${
+              darkMode ? "bg-[#121215] border-zinc-800/80 text-zinc-300" : "bg-slate-100 border-slate-300 text-slate-700"
+            }`}
           >
-            <Globe size={11} className="text-zinc-400 shrink-0" />
-            <span className="font-bold">{locale === "en" ? "EN" : "AM"}</span>
+            <Globe size={11} className={darkMode ? "text-zinc-400" : "text-slate-500"} />
+            <span>{locale === "en" ? "EN" : "AM"}</span>
           </button>
 
           {/* Light/Dark Toggle Icon */}
           <button 
             onClick={() => setDarkMode(!darkMode)}
-            className="p-1 bg-[#121215] border border-zinc-800/80 rounded-lg text-zinc-300 hover:text-amber-400 transition-colors"
+            className={`p-1 border rounded-lg transition-colors cursor-pointer ${
+              darkMode ? "bg-[#121215] border-zinc-800/80 text-amber-400 hover:bg-zinc-800" : "bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200"
+            }`}
+            title={darkMode ? "Switch to Morning Light Mode" : "Switch to Night Dark Mode"}
           >
-            <Moon size={12} />
+            {darkMode ? (
+              <Sun size={13} className="text-[#FFD700] fill-[#FFD700]" />
+            ) : (
+              <Moon size={13} className="text-slate-800 fill-slate-800" />
+            )}
           </button>
         </div>
       </div>
 
       {/* 2. MAIN APP CONTENT CONTAINER */}
-      <div className="flex-1 overflow-y-auto relative bg-[#070709] scrollbar-none">
+      <div className={`flex-1 overflow-y-auto overflow-x-hidden relative scrollbar-none pb-24 touch-pan-y ${
+        darkMode ? "bg-[#070709]" : "bg-slate-50"
+      }`}>
         
         {/* SCREEN OVERLAYS: Splash, Onboarding, Top Up Credits, Settings, Verification Result, Empty State */}
         <AnimatePresence mode="wait">
@@ -409,13 +445,13 @@ export default function AndroidAppView({
             </motion.div>
           )}
           
-          {/* A. CREDITS / TOP UP SCREEN */}
+          {/* A. CREDITS / TOP UP SUBSCRIPTION SCREEN (Telebirr Only) */}
           {subScreen === "topup" && (
             <motion.div 
               initial={{ opacity: 0, x: 50 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 50 }}
-              className="absolute inset-0 bg-[#070709] z-30 p-4 space-y-5 overflow-y-auto"
+              className="absolute inset-0 bg-[#070709] z-30 p-4 space-y-4 overflow-y-auto"
             >
               <div className="flex items-center justify-between pb-2 border-b border-zinc-900">
                 <button 
@@ -423,16 +459,24 @@ export default function AndroidAppView({
                   className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white font-bold"
                 >
                   <ArrowLeft size={16} />
-                  <span>Top Up Credits</span>
+                  <span>Subscription & Upgrade Package</span>
                 </button>
+                <span className="bg-amber-400/10 border border-amber-400/40 text-amber-300 px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase">
+                  Current: {activePlan} Tier
+                </span>
               </div>
 
-              {/* Current Balance Card */}
-              <div className="p-4 bg-zinc-900/80 border border-zinc-800 rounded-2xl flex items-center justify-between">
+              {/* Current Balance & Active Plan Card */}
+              <div className="p-4 bg-zinc-900/80 border border-amber-400/30 rounded-2xl flex items-center justify-between shadow-lg">
                 <div>
-                  <p className="text-xs text-zinc-400 font-medium">Current Balance</p>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-zinc-400 font-medium">Active Subscription Plan</span>
+                    <span className="px-1.5 py-0.2 bg-amber-400 text-black font-extrabold text-[9px] rounded font-mono uppercase">
+                      {activePlan}
+                    </span>
+                  </div>
                   <p className="text-2xl font-black text-white font-mono mt-0.5">
-                    {userCredits} <span className="text-sm font-normal text-amber-400">Credits</span>
+                    {userCredits} <span className="text-sm font-normal text-amber-400">Credits Available</span>
                   </p>
                 </div>
                 <div className="w-12 h-12 bg-amber-400/10 border border-amber-400/30 rounded-2xl flex items-center justify-center text-amber-400">
@@ -440,78 +484,97 @@ export default function AndroidAppView({
                 </div>
               </div>
 
-              {/* Select Amount Grid */}
+              {/* Package Select Grid */}
               <div className="space-y-2">
-                <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider">Select Amount</label>
-                <div className="grid grid-cols-3 gap-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider">Select Credit Upgrade Package</label>
+                  <span className="text-[10px] text-amber-400 font-bold font-mono">Instant Activation</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {[
-                    { credits: 10, etb: 100 },
-                    { credits: 20, etb: 200 },
-                    { credits: 50, etb: 500 },
-                    { credits: 100, etb: 1000 },
-                    { credits: 200, etb: 2000 },
-                    { credits: 500, etb: 5000 },
+                    { credits: 20, etb: 200, plan: "Starter" },
+                    { credits: 50, etb: 500, plan: "Pro" },
+                    { credits: 100, etb: 1000, plan: "Business" },
+                    { credits: 250, etb: 2000, plan: "Enterprise" },
                   ].map((item) => (
                     <button
-                      key={item.credits}
-                      onClick={() => setSelectedCreditsAmount(item.credits)}
-                      className={`p-3 rounded-xl border flex flex-col items-center justify-center transition-all ${
-                        selectedCreditsAmount === item.credits
-                          ? "bg-amber-400 text-black border-amber-400 font-bold shadow-lg"
+                      key={item.plan}
+                      onClick={() => setSelectedPackage(item)}
+                      className={`p-3 rounded-xl border flex flex-col items-center justify-center transition-all cursor-pointer ${
+                        selectedPackage.plan === item.plan
+                          ? "bg-amber-400 text-black border-amber-400 font-extrabold shadow-lg scale-[1.02]"
                           : "bg-zinc-900/90 text-zinc-300 border-zinc-800 hover:border-zinc-700"
                       }`}
                     >
-                      <span className="text-lg font-black font-mono">{item.credits}</span>
-                      <span className="text-[10px] opacity-75 font-mono">ETB {item.etb}</span>
+                      <span className={`text-[10px] uppercase font-bold font-mono ${selectedPackage.plan === item.plan ? "text-black" : "text-amber-400"}`}>
+                        {item.plan}
+                      </span>
+                      <span className="text-lg font-black font-mono mt-0.5">+{item.credits} Cr</span>
+                      <span className={`text-[10px] font-mono opacity-80 ${selectedPackage.plan === item.plan ? "text-black" : "text-zinc-400"}`}>
+                        ETB {item.etb}
+                      </span>
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* Payment Method Selector */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider">Payment Method</label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    onClick={() => setPaymentMethod("mobile")}
-                    className={`p-3.5 rounded-xl border flex items-center gap-2.5 text-xs font-bold transition-all ${
-                      paymentMethod === "mobile"
-                        ? "bg-amber-400/10 border-amber-400 text-amber-400"
-                        : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200"
-                    }`}
-                  >
-                    <Smartphone size={16} />
-                    <span>Mobile Money</span>
-                  </button>
-
-                  <button
-                    onClick={() => setPaymentMethod("bank")}
-                    className={`p-3.5 rounded-xl border flex items-center gap-2.5 text-xs font-bold transition-all ${
-                      paymentMethod === "bank"
-                        ? "bg-amber-400/10 border-amber-400 text-amber-400"
-                        : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200"
-                    }`}
-                  >
-                    <Building2 size={16} />
-                    <span>Bank Transfer</span>
-                  </button>
+              {/* Package Upgrade Summary Banner */}
+              <div className="p-3 bg-amber-400/10 border border-amber-400/30 rounded-xl flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <p className="text-[10px] text-zinc-400 font-mono uppercase">Target Upgrade Package</p>
+                  <p className="text-xs font-black text-amber-300 flex items-center gap-1 font-display">
+                    <Zap size={13} className="fill-amber-300" />
+                    <span>Upgrading to {selectedPackage.plan} Package (+{selectedPackage.credits} Credits)</span>
+                  </p>
                 </div>
+                <div className="text-right">
+                  <span className="text-xs font-black text-white font-mono">ETB {selectedPackage.etb}</span>
+                </div>
+              </div>
+
+              {/* Payment Method - Telebirr Merchant */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider">Payment Method (Telebirr)</label>
+                <div className="p-3.5 bg-[#121216] border border-amber-400/40 rounded-xl flex items-center gap-3 text-xs font-bold text-amber-300">
+                  <Smartphone size={20} className="text-amber-400" />
+                  <div>
+                    <p className="font-extrabold text-white text-xs">Telebirr Merchant Instant Upgrade</p>
+                    <p className="text-[10px] text-zinc-400 font-normal">Pay ETB {selectedPackage.etb} via Telebirr merchant code & input reference below</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Telebirr Reference Input */}
+              <div className="space-y-1.5 p-3.5 bg-zinc-900/90 border border-zinc-800 rounded-xl">
+                <label className="block text-[10px] font-bold text-zinc-300 uppercase tracking-wider">
+                  Telebirr Transaction Reference No.
+                </label>
+                <input
+                  type="text"
+                  value={telebirrRefInput}
+                  onChange={(e) => setTelebirrRefInput(e.target.value.toUpperCase())}
+                  placeholder="e.g., TLB9845210"
+                  className="w-full bg-[#121214] border border-zinc-800 focus:border-amber-400 px-3 py-2 rounded-lg text-xs font-mono text-white placeholder-zinc-600 outline-none"
+                />
               </div>
 
               {/* Primary Action Button */}
               <button 
                 onClick={() => {
-                  alert(`Initiating ${paymentMethod === "mobile" ? "Telebirr" : "CBE"} top up for ${selectedCreditsAmount} credits.`);
+                  if (!telebirrRefInput.trim()) {
+                    alert("Please enter your Telebirr payment transaction reference number.");
+                    return;
+                  }
+                  setUserCredits(c => c + selectedPackage.credits);
+                  setActivePlan(selectedPackage.plan);
+                  alert(`✓ Upgraded to ${selectedPackage.plan} Package successfully! ${selectedPackage.credits} credits added to your account.`);
+                  setTelebirrRefInput("");
                   setSubScreen("none");
                 }}
-                className="w-full py-3.5 bg-amber-400 hover:bg-amber-300 text-black font-extrabold text-sm rounded-xl shadow-[0_0_20px_rgba(250,204,21,0.3)] transition-all cursor-pointer"
+                className="w-full py-3.5 bg-amber-400 hover:bg-amber-300 text-black font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-[0_0_20px_rgba(250,204,21,0.3)] transition-all cursor-pointer"
               >
-                Proceed to Pay
+                Upgrade to {selectedPackage.plan} Package (+{selectedPackage.credits} Credits)
               </button>
-
-              <p className="text-[10px] text-zinc-500 text-center font-mono">
-                Secure payment powered by BeuVerify Node Engine
-              </p>
             </motion.div>
           )}
 
@@ -620,24 +683,45 @@ export default function AndroidAppView({
 
                 {/* Security */}
                 <div className="space-y-2">
-                  <h4 className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Security</h4>
+                  <h4 className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Security & Biometrics</h4>
                   <div className="bg-zinc-900/90 border border-zinc-800 rounded-xl divide-y divide-zinc-800/60">
-                    <div className="p-3 flex items-center justify-between cursor-pointer hover:bg-zinc-800/40">
+                    <div 
+                      onClick={() => { setSecurityModalMode("unlock"); setShowSecurityModal(true); }}
+                      className="p-3 flex items-center justify-between cursor-pointer hover:bg-zinc-800/40 text-amber-400 font-bold"
+                    >
                       <div className="flex items-center gap-2">
                         <Lock size={15} className="text-amber-400" />
-                        <span>Change PIN</span>
+                        <span>Lock App Now</span>
+                      </div>
+                      <ChevronRight size={14} className="text-amber-400" />
+                    </div>
+                    <div 
+                      onClick={() => { setSecurityModalMode("setup"); setShowSecurityModal(true); }}
+                      className="p-3 flex items-center justify-between cursor-pointer hover:bg-zinc-800/40"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Lock size={15} className="text-amber-400" />
+                        <span>Change Security PIN</span>
                       </div>
                       <ChevronRight size={14} className="text-zinc-500" />
                     </div>
                     <div className="p-3 flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <Fingerprint size={15} className="text-amber-400" />
-                        <span>Biometric Lock</span>
+                        <span>Biometric Lock (Fingerprint)</span>
                       </div>
                       <input 
                         type="checkbox" 
                         checked={biometricLock} 
-                        onChange={e => setBiometricLock(e.target.checked)}
+                        onChange={e => {
+                          const val = e.target.checked;
+                          setBiometricLock(val);
+                          localStorage.setItem("beu_verify_biometrics_enabled", val ? "true" : "false");
+                          if (val) {
+                            setSecurityModalMode("setup");
+                            setShowSecurityModal(true);
+                          }
+                        }}
                         className="accent-amber-400 w-4 h-4 cursor-pointer"
                       />
                     </div>
@@ -648,15 +732,24 @@ export default function AndroidAppView({
                 <div className="space-y-2">
                   <h4 className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">More</h4>
                   <div className="bg-zinc-900/90 border border-zinc-800 rounded-xl divide-y divide-zinc-800/60">
-                    <div className="p-3 flex items-center justify-between cursor-pointer hover:bg-zinc-800/40">
+                    <div 
+                      onClick={() => setSubScreen("about")}
+                      className="p-3 flex items-center justify-between cursor-pointer hover:bg-zinc-800/40 text-white"
+                    >
                       <span>About BeuVerify</span>
                       <ChevronRight size={14} className="text-zinc-500" />
                     </div>
-                    <div className="p-3 flex items-center justify-between cursor-pointer hover:bg-zinc-800/40">
+                    <div 
+                      onClick={() => setSubScreen("privacy")}
+                      className="p-3 flex items-center justify-between cursor-pointer hover:bg-zinc-800/40 text-white"
+                    >
                       <span>Privacy Policy</span>
                       <ChevronRight size={14} className="text-zinc-500" />
                     </div>
-                    <div className="p-3 flex items-center justify-between cursor-pointer hover:bg-zinc-800/40">
+                    <div 
+                      onClick={() => setSubScreen("terms")}
+                      className="p-3 flex items-center justify-between cursor-pointer hover:bg-zinc-800/40 text-white"
+                    >
                       <span>Terms of Service</span>
                       <ChevronRight size={14} className="text-zinc-500" />
                     </div>
@@ -667,13 +760,108 @@ export default function AndroidAppView({
             </motion.div>
           )}
 
+          {/* ABOUT BEUVERIFY SCREEN */}
+          {subScreen === "about" && (
+            <motion.div 
+              initial={{ opacity: 0, x: 50 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 50 }}
+              className="absolute inset-0 bg-[#070709] z-30 p-4 space-y-4 overflow-y-auto"
+            >
+              <div className="flex items-center justify-between pb-2 border-b border-zinc-900">
+                <button 
+                  onClick={() => setSubScreen("settings")} 
+                  className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white font-bold"
+                >
+                  <ArrowLeft size={16} />
+                  <span>About BeuVerify</span>
+                </button>
+              </div>
+
+              <div className="p-4 bg-zinc-900 border border-amber-400/30 rounded-2xl space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-amber-400 rounded-xl flex items-center justify-center text-black font-black">
+                    <Zap size={22} className="fill-black" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-white text-base">BeuVerify v2.4</h3>
+                    <p className="text-[10px] text-amber-400 font-mono">Ethiopian Financial Verification Platform</p>
+                  </div>
+                </div>
+                <p className="text-xs text-zinc-300 leading-relaxed">
+                  BeuVerify is an advanced receipt verification engine engineered specifically for Commercial Bank of Ethiopia (CBE), Bank of Abyssinia (BOA), and Telebirr digital receipts. Our system verifies reference validity, detects duplicates, and prevents fraudulent payments in real-time.
+                </p>
+              </div>
+            </motion.div>
+          )}
+
+          {/* PRIVACY POLICY SCREEN */}
+          {subScreen === "privacy" && (
+            <motion.div 
+              initial={{ opacity: 0, x: 50 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 50 }}
+              className="absolute inset-0 bg-[#070709] z-30 p-4 space-y-4 overflow-y-auto"
+            >
+              <div className="flex items-center justify-between pb-2 border-b border-zinc-900">
+                <button 
+                  onClick={() => setSubScreen("settings")} 
+                  className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white font-bold"
+                >
+                  <ArrowLeft size={16} />
+                  <span>Privacy Policy</span>
+                </button>
+              </div>
+
+              <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-2xl space-y-3 text-xs text-zinc-300 leading-relaxed">
+                <h3 className="font-bold text-white text-sm">Data Privacy & Security</h3>
+                <p>
+                  BeuVerify values your privacy. Account numbers, reference codes, and receipt details processed through our app are encrypted end-to-end. We do not store full payment credentials on unencrypted servers.
+                </p>
+                <p>
+                  Verification logs are stored locally on your device and linked to your account history to prevent duplicate transactions.
+                </p>
+              </div>
+            </motion.div>
+          )}
+
+          {/* TERMS OF SERVICE SCREEN */}
+          {subScreen === "terms" && (
+            <motion.div 
+              initial={{ opacity: 0, x: 50 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 50 }}
+              className="absolute inset-0 bg-[#070709] z-30 p-4 space-y-4 overflow-y-auto"
+            >
+              <div className="flex items-center justify-between pb-2 border-b border-zinc-900">
+                <button 
+                  onClick={() => setSubScreen("settings")} 
+                  className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white font-bold"
+                >
+                  <ArrowLeft size={16} />
+                  <span>Terms of Service</span>
+                </button>
+              </div>
+
+              <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-2xl space-y-3 text-xs text-zinc-300 leading-relaxed">
+                <h3 className="font-bold text-white text-sm">User Agreement</h3>
+                <p>
+                  By using BeuVerify, you agree to submit legitimate financial transaction details for verification purposes only.
+                </p>
+                <p>
+                  Attempting to forge, manipulate, or re-verify already claimed receipt reference numbers is strictly prohibited and logged by our security system.
+                </p>
+              </div>
+            </motion.div>
+          )}
+
           {/* C. VERIFICATION RESULT OVERLAY SCREEN */}
           {(currentVerification || subScreen === "result") && (
             <motion.div 
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="absolute inset-0 bg-[#070709] z-30 p-4 space-y-5 overflow-y-auto"
+              className="absolute inset-0 bg-[#070709] z-30 p-4 space-y-4 overflow-y-auto"
             >
               <div className="flex items-center justify-between pb-2 border-b border-zinc-900">
                 <button 
@@ -686,88 +874,29 @@ export default function AndroidAppView({
                   <ArrowLeft size={16} />
                 </button>
                 <span className="text-xs font-bold text-zinc-400">Verification Result</span>
-                <button className="p-2 bg-zinc-900 hover:bg-zinc-800 rounded-full text-zinc-300">
-                  <Share2 size={16} />
-                </button>
+                <div className="w-8 h-8" />
               </div>
 
-              {/* Big Green Check Circle */}
-              <div className="flex flex-col items-center justify-center pt-3 text-center space-y-2">
-                <div className="w-16 h-16 bg-emerald-500/10 border-2 border-emerald-500/40 rounded-full flex items-center justify-center text-emerald-400 shadow-[0_0_30px_rgba(16,185,129,0.3)]">
-                  <CheckCircle2 size={36} />
-                </div>
-                <h3 className="text-emerald-400 text-sm font-extrabold uppercase tracking-wide">
-                  Verified
-                </h3>
-                <h2 className="text-3xl font-black text-white font-mono tracking-tight">
-                  ETB {currentVerification?.amount?.toFixed(2) || "245.50"}
-                </h2>
-                <p className="text-xs text-zinc-400 max-w-xs leading-relaxed">
-                  Receipt is authentic and verified on the blockchain.
-                </p>
-              </div>
-
-              {/* Details Table */}
-              <div className="bg-zinc-900/90 border border-zinc-800 rounded-2xl p-4 space-y-3 text-xs">
-                <div className="flex justify-between items-center py-1 border-b border-zinc-800/60">
-                  <span className="text-zinc-400">Merchant</span>
-                  <span className="font-bold text-white">{currentVerification?.senderName || "SuperMart"}</span>
-                </div>
-
-                <div className="flex justify-between items-center py-1 border-b border-zinc-800/60">
-                  <span className="text-zinc-400">Date & Time</span>
-                  <span className="font-mono text-zinc-200">
-                    {currentVerification?.transactionDate 
-                      ? new Date(currentVerification.transactionDate).toLocaleString() 
-                      : "May 12, 2025 • 14:42"}
-                  </span>
-                </div>
-
-                <div className="flex justify-between items-center py-1 border-b border-zinc-800/60">
-                  <span className="text-zinc-400">Transaction ID</span>
-                  <span className="font-mono text-amber-400 font-bold">
-                    #{currentVerification?.reference || "BVF8K9D2A1"}
-                  </span>
-                </div>
-
-                <div className="flex justify-between items-center py-1">
-                  <span className="text-zinc-400">Confidence</span>
-                  <span className="font-mono font-bold text-emerald-400">99.8%</span>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="space-y-2 pt-2">
-                <button 
-                  onClick={() => handleSendBrevoReceipt(
-                    currentVerification?.senderName || "SuperMart",
-                    currentVerification?.amount || 245.50,
-                    currentVerification?.reference || "BVF8K9D2A1"
-                  )}
-                  disabled={sendingBrevoReceipt}
-                  className="w-full py-3 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
-                >
-                  <Mail size={15} />
-                  <span>{sendingBrevoReceipt ? "Sending Email..." : "Email Receipt via Brevo"}</span>
-                </button>
-
-                <button 
-                  onClick={() => alert(`Receipt details for #${currentVerification?.reference || "BVF8K9D2A1"}`)}
-                  className="w-full py-3 bg-[#18181C] hover:bg-zinc-800 border border-zinc-700/80 text-white font-bold text-xs rounded-xl transition-all cursor-pointer"
-                >
-                  View Receipt
-                </button>
-                <button 
-                  onClick={() => {
-                    setCurrentVerification(null);
-                    setSubScreen("none");
-                    setActiveTab("history");
-                  }}
-                  className="w-full py-3.5 bg-[#FFD700] hover:bg-amber-300 text-black font-extrabold text-sm rounded-xl shadow-[0_0_20px_rgba(255,215,0,0.3)] transition-all cursor-pointer"
-                >
-                  Save Transaction
-                </button>
-              </div>
+              <ResultDisplay
+                result={currentVerification || {
+                  requestId: "req_demo",
+                  bank: "telebirr",
+                  reference: "FT98234120",
+                  processingStatus: ProcessingStatus.Completed,
+                  status: VerificationStatus.Success,
+                  verified: true,
+                  senderName: "Abebe Kebede",
+                  receiverName: userName,
+                  amount: 245.50,
+                  transactionDate: new Date().toISOString()
+                }}
+                onClose={() => {
+                  setCurrentVerification(null);
+                  setSubScreen("none");
+                }}
+                themeConfig={THEMES.gold}
+                t={TRANSLATIONS[locale]}
+              />
             </motion.div>
           )}
 
@@ -832,12 +961,14 @@ export default function AndroidAppView({
                     TODAY'S VERIFIED VOLUME
                   </p>
                   <div className="flex items-baseline gap-1.5">
-                    <h2 className="text-2xl font-black text-white font-mono tracking-tight">0.00</h2>
-                    <span className="text-xs font-bold text-zinc-400 font-mono">ETB</span>
+                    <h2 className="text-2xl font-black text-white font-mono tracking-tight">
+                      {logs.reduce((sum, item) => sum + (item.amount || 0), 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </h2>
+                    <span className="text-xs font-bold text-amber-400 font-mono">ETB</span>
                   </div>
                   <p className="text-[9px] text-emerald-400 flex items-center gap-1 font-medium">
                     <CheckCircle2 size={11} />
-                    <span>Verified today</span>
+                    <span>{logs.length} Total Verified</span>
                   </p>
                 </div>
 
@@ -974,112 +1105,105 @@ export default function AndroidAppView({
               </button>
             </div>
 
-            {/* History List Grouped by Today / Yesterday */}
+            {/* History List from Real Saved Logs */}
             <div className="space-y-4 text-xs">
-              
-              {/* Today Section */}
-              <div className="space-y-2">
-                <h4 className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Today</h4>
-                <div className="space-y-2">
-                  {sampleTransactions.filter(t => t.dateGroup === "Today").map(item => (
-                    <div 
-                      key={item.id}
-                      onClick={() => {
-                        setCurrentVerification({
-                          requestId: item.id,
-                          bank: "telebirr",
-                          reference: item.ref,
-                          processingStatus: ProcessingStatus.Completed,
-                          status: VerificationStatus.Success,
-                          verified: true,
-                          senderName: item.merchant,
-                          receiverName: userName,
-                          amount: item.amount,
-                          transactionDate: new Date().toISOString()
-                        });
-                      }}
-                      className="p-3 bg-zinc-900/90 border border-zinc-800/90 hover:border-amber-400/50 rounded-xl flex items-center justify-between cursor-pointer transition-all"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 bg-zinc-800 border border-zinc-700 rounded-xl flex items-center justify-center text-amber-400">
-                          <Building2 size={16} />
-                        </div>
-                        <div>
-                          <p className="font-bold text-white">{item.merchant}</p>
-                          <p className="text-[10px] text-zinc-400 font-mono">{item.time}</p>
-                        </div>
-                      </div>
-
-                      <div className="text-right flex items-center gap-2">
-                        <div>
-                          <p className="font-bold text-white font-mono">ETB {item.amount.toFixed(2)}</p>
-                        </div>
-                        <CheckCircle2 size={16} className="text-emerald-400" />
-                      </div>
-                    </div>
-                  ))}
+              {logs.length === 0 ? (
+                <div className="p-8 text-center bg-zinc-900/60 border border-zinc-800 rounded-2xl space-y-2">
+                  <FileText size={32} className="mx-auto text-zinc-600" />
+                  <p className="font-bold text-zinc-300 text-sm">Fresh Account Start</p>
+                  <p className="text-[11px] text-zinc-500 max-w-xs mx-auto">
+                    No verified transactions recorded yet. Tap Scan or Manual to verify your first receipt.
+                  </p>
                 </div>
-              </div>
-
-              {/* Yesterday Section */}
-              <div className="space-y-2">
-                <h4 className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Yesterday</h4>
+              ) : (
                 <div className="space-y-2">
-                  {sampleTransactions.filter(t => t.dateGroup === "Yesterday").map(item => (
-                    <div 
-                      key={item.id}
-                      onClick={() => {
-                        setCurrentVerification({
-                          requestId: item.id,
-                          bank: "cbe",
-                          reference: item.ref,
-                          processingStatus: ProcessingStatus.Completed,
-                          status: VerificationStatus.Success,
-                          verified: true,
-                          senderName: item.merchant,
-                          receiverName: userName,
-                          amount: item.amount,
-                          transactionDate: new Date().toISOString()
-                        });
-                      }}
-                      className="p-3 bg-zinc-900/90 border border-zinc-800/90 hover:border-amber-400/50 rounded-xl flex items-center justify-between cursor-pointer transition-all"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 bg-zinc-800 border border-zinc-700 rounded-xl flex items-center justify-center text-amber-400">
-                          <Building2 size={16} />
-                        </div>
-                        <div>
-                          <p className="font-bold text-white">{item.merchant}</p>
-                          <p className="text-[10px] text-zinc-400 font-mono">{item.time}</p>
-                        </div>
-                      </div>
+                  <h4 className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
+                    All Saved Verifications ({logs.length})
+                  </h4>
+                  <div className="space-y-2">
+                    {logs
+                      .filter(item => {
+                        if (!historySearch.trim()) return true;
+                        const query = historySearch.toLowerCase();
+                        return (
+                          (item.reference && item.reference.toLowerCase().includes(query)) ||
+                          (item.senderName && item.senderName.toLowerCase().includes(query)) ||
+                          (item.receiverName && item.receiverName.toLowerCase().includes(query)) ||
+                          (item.bank && item.bank.toLowerCase().includes(query))
+                        );
+                      })
+                      .map((logItem, idx) => (
+                        <div 
+                          key={logItem.requestId || logItem.id || logItem.reference || idx}
+                          onClick={() => {
+                            setCurrentVerification({
+                              requestId: logItem.requestId || logItem.id || `req_${idx}`,
+                              bank: logItem.bank || "telebirr",
+                              reference: logItem.reference,
+                              processingStatus: ProcessingStatus.Completed,
+                              status: VerificationStatus.Success,
+                              verified: true,
+                              senderName: logItem.senderName || "Payer",
+                              receiverName: logItem.receiverName || userName,
+                              amount: logItem.amount || 0,
+                              transactionDate: logItem.timestamp || new Date().toISOString()
+                            });
+                          }}
+                          className="p-3 bg-zinc-900/90 border border-zinc-800/90 hover:border-amber-400/50 rounded-xl flex items-center justify-between cursor-pointer transition-all"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 bg-zinc-800 border border-zinc-700 rounded-xl flex items-center justify-center text-amber-400 shrink-0">
+                              <Building2 size={16} />
+                            </div>
+                            <div>
+                              <p className="font-bold text-white">{logItem.senderName || logItem.bank?.toUpperCase() || "Payer"}</p>
+                              <p className="text-[10px] text-zinc-400 font-mono">
+                                {new Date(logItem.timestamp).toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
 
-                      <div className="text-right flex items-center gap-2">
-                        <div>
-                          <p className="font-bold text-white font-mono">ETB {item.amount.toFixed(2)}</p>
+                          <div className="text-right flex items-center gap-2">
+                            <div>
+                              <p className="font-bold text-white font-mono">
+                                ETB {(logItem.amount || 0).toFixed(2)}
+                              </p>
+                              <p className="text-[9px] text-amber-400 font-mono uppercase">{logItem.bank}</p>
+                            </div>
+                            <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
+                          </div>
                         </div>
-                        <CheckCircle2 size={16} className="text-emerald-400" />
-                      </div>
-                    </div>
-                  ))}
+                      ))}
+                  </div>
                 </div>
-              </div>
-
+              )}
             </div>
 
           </div>
         )}
 
-        {/* 5. TAB 3: SCAN SCREEN */}
+        {/* 5. TAB 3: SCAN / MANUAL VERIFICATION SCREEN */}
         {activeTab === "scan" && subScreen === "none" && (
           <div className="p-3 space-y-3 h-full flex flex-col overflow-y-auto">
             <div className="flex items-center justify-between text-xs border-b border-zinc-900 pb-2 shrink-0">
-              <button onClick={() => setActiveTab("home")} className="p-1 text-zinc-400 hover:text-white">
+              <button onClick={() => setActiveTab("home")} className="p-1 text-zinc-400 hover:text-white flex items-center gap-1.5 font-bold">
                 <X size={16} />
+                <span className="text-[11px] font-bold text-white">
+                  {scanTabMode === "manual" ? "Manual Verification Methods" : "Scan Receipt"}
+                </span>
               </button>
               
               {/* 3-Way Mode Switcher Pill */}
               <div className="flex bg-[#121215] border border-zinc-800 rounded-lg p-0.5 text-[10px] font-bold">
+                <button
+                  onClick={() => setScanTabMode("manual")}
+                  className={`px-2 py-1 rounded-md flex items-center gap-1 transition-all ${
+                    scanTabMode === "manual" ? "bg-[#FFD700] text-black font-extrabold" : "text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  <Zap size={11} className={scanTabMode === "manual" ? "fill-black" : ""} />
+                  <span>Manual</span>
+                </button>
                 <button
                   onClick={() => setScanTabMode("camera")}
                   className={`px-2 py-1 rounded-md flex items-center gap-1 transition-all ${
@@ -1087,7 +1211,7 @@ export default function AndroidAppView({
                   }`}
                 >
                   <Camera size={11} />
-                  <span>Scan</span>
+                  <span>Camera</span>
                 </button>
                 <button
                   onClick={() => setScanTabMode("upload")}
@@ -1098,20 +1222,7 @@ export default function AndroidAppView({
                   <Upload size={11} />
                   <span>Upload</span>
                 </button>
-                <button
-                  onClick={() => setScanTabMode("manual")}
-                  className={`px-2 py-1 rounded-md flex items-center gap-1 transition-all ${
-                    scanTabMode === "manual" ? "bg-[#FFD700] text-black font-extrabold" : "text-zinc-400 hover:text-white"
-                  }`}
-                >
-                  <Zap size={11} className={scanTabMode === "manual" ? "fill-black" : ""} />
-                  <span>Manual</span>
-                </button>
               </div>
-
-              <button className="p-1 text-amber-400">
-                <Flashlight size={16} />
-              </button>
             </div>
 
             {/* Dynamic Content: Manual Form vs QR Scanner */}
@@ -1121,8 +1232,9 @@ export default function AndroidAppView({
                   onVerify={(data) => {
                     if (onVerifyReference) onVerifyReference(data.reference, data.bank);
                   }}
+                  onSwitchToScan={() => setScanTabMode("camera")}
                   isLoading={isLoadingVerification}
-                  themeConfig={THEMES.gold}
+                  themeConfig={{ ...THEMES.gold, mode: darkMode ? "dark" : "light" }}
                   t={TRANSLATIONS[locale]}
                 />
               </div>
@@ -1165,64 +1277,74 @@ export default function AndroidAppView({
               </select>
             </div>
 
-            {/* Verified Volume Chart Card */}
+            {/* Verified Volume Daily Chart Card */}
             <div className="p-4 bg-zinc-900/90 border border-zinc-800 rounded-2xl space-y-3">
               <div>
-                <p className="text-xs text-zinc-400">Verified Volume</p>
+                <p className="text-xs text-zinc-400">Total Verified Volume</p>
                 <div className="flex items-baseline gap-2">
-                  <h3 className="text-2xl font-black text-white font-mono">ETB 983.00</h3>
-                  <span className="text-xs font-bold text-emerald-400">+ 23% vs last week</span>
+                  <h3 className="text-2xl font-black text-white font-mono">
+                    ETB {logs.reduce((sum, item) => sum + (item.amount || 0), 0).toFixed(2)}
+                  </h3>
+                  <span className="text-xs font-bold text-emerald-400">Realtime Daily Log</span>
                 </div>
               </div>
 
-              {/* Animated SVG Chart Line */}
-              <div className="h-28 w-full pt-2">
-                <svg className="w-full h-full overflow-visible" viewBox="0 0 300 100">
-                  <defs>
-                    <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#FACC15" stopOpacity="0.3" />
-                      <stop offset="100%" stopColor="#FACC15" stopOpacity="0" />
-                    </linearGradient>
-                  </defs>
-                  
-                  {/* Area */}
-                  <path 
-                    d="M 0,80 Q 50,40 100,60 T 200,30 T 300,10 L 300,100 L 0,100 Z" 
-                    fill="url(#chartGrad)"
-                  />
-                  
-                  {/* Stroke Line */}
-                  <path 
-                    d="M 0,80 Q 50,40 100,60 T 200,30 T 300,10" 
-                    fill="none" 
-                    stroke="#FACC15" 
-                    strokeWidth="3"
-                  />
+              {/* Day-by-Day Volume Bar Chart */}
+              <div className="h-28 w-full pt-3 flex items-end justify-between gap-2 px-1">
+                {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((dayName, dayIndex) => {
+                  // Calculate total volume for this day of the week from real logs
+                  const dayLogs = logs.filter(l => {
+                    const d = new Date(l.timestamp || Date.now());
+                    const jsDay = d.getDay(); // 0 is Sun, 1 is Mon...
+                    const mappedIdx = jsDay === 0 ? 6 : jsDay - 1;
+                    return mappedIdx === dayIndex;
+                  });
+                  const dayVolume = dayLogs.reduce((acc, l) => acc + (l.amount || 0), 0);
+                  const maxVol = Math.max(...["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((_, idx) => {
+                    return logs.filter(l => {
+                      const d = new Date(l.timestamp || Date.now());
+                      const jsDay = d.getDay();
+                      const mappedIdx = jsDay === 0 ? 6 : jsDay - 1;
+                      return mappedIdx === idx;
+                    }).reduce((acc, l) => acc + (l.amount || 0), 0);
+                  }), 100);
 
-                  {/* Points */}
-                  <circle cx="100" cy="60" r="4" fill="#FACC15" />
-                  <circle cx="200" cy="30" r="4" fill="#FACC15" />
-                  <circle cx="300" cy="10" r="5" fill="#10B981" />
-                </svg>
-              </div>
+                  const barPercent = Math.min(100, Math.max(12, Math.round((dayVolume / maxVol) * 100)));
 
-              <div className="flex justify-between text-[10px] text-zinc-500 font-mono">
-                <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+                  return (
+                    <div key={dayName} className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end group">
+                      {dayVolume > 0 && (
+                        <span className="text-[8px] font-mono text-amber-300 font-bold opacity-90 truncate max-w-[36px]">
+                          {dayVolume >= 1000 ? `${(dayVolume/1000).toFixed(1)}k` : dayVolume.toFixed(0)}
+                        </span>
+                      )}
+                      <div className="w-full bg-zinc-800 rounded-t-lg relative overflow-hidden flex items-end" style={{ height: "70%" }}>
+                        <div 
+                          className={`w-full rounded-t-lg transition-all duration-500 ${
+                            dayVolume > 0 ? "bg-gradient-to-t from-amber-500 to-amber-300 shadow-[0_0_10px_rgba(250,204,21,0.4)]" : "bg-zinc-800"
+                          }`}
+                          style={{ height: `${barPercent}%` }}
+                        />
+                      </div>
+                      <span className="text-[10px] text-zinc-400 font-mono font-bold uppercase">{dayName}</span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
             {/* Metrics Grid */}
             <div className="grid grid-cols-2 gap-3">
               <div className="p-3 bg-zinc-900/80 border border-zinc-800 rounded-xl space-y-1">
-                <span className="text-[11px] text-zinc-400">Receipts</span>
-                <p className="text-lg font-black text-white font-mono">13</p>
-                <p className="text-[10px] text-emerald-400">+18%</p>
+                <span className="text-[11px] text-zinc-400">Total Receipts</span>
+                <p className="text-lg font-black text-white font-mono">{logs.length}</p>
+                <p className="text-[10px] text-emerald-400">Saved</p>
               </div>
 
               <div className="p-3 bg-zinc-900/80 border border-zinc-800 rounded-xl space-y-1">
-                <span className="text-[11px] text-zinc-400">Accuracy</span>
+                <span className="text-[11px] text-zinc-400">Node Accuracy</span>
                 <p className="text-lg font-black text-emerald-400 font-mono">100%</p>
-                <p className="text-[10px] text-emerald-400">+0%</p>
+                <p className="text-[10px] text-emerald-400">Direct Verified</p>
               </div>
             </div>
 
@@ -1513,8 +1635,10 @@ export default function AndroidAppView({
         )}
       </AnimatePresence>
 
-      {/* 9. BOTTOM NAVIGATION BAR (Matches Mockup Design) */}
-      <div className="w-full h-16 bg-[#0D0D10] border-t border-zinc-900/80 px-2 flex items-center justify-around shrink-0 z-20">
+      {/* 9. BOTTOM NAVIGATION BAR (Fixed Native Mobile Layout) */}
+      <div className={`w-full h-16 border-t px-2 flex items-center justify-around shrink-0 z-30 backdrop-blur-md ${
+        darkMode ? "bg-[#0D0D10]/95 border-zinc-900/80" : "bg-white/95 border-slate-200 shadow-lg text-slate-800"
+      }`}>
         
         {/* Tab 1: Home */}
         <button
@@ -1571,6 +1695,235 @@ export default function AndroidAppView({
         </button>
 
       </div>
+
+      {/* 9. SIDE NAVIGATION DRAWER (3 Lines Menu Icon) */}
+      <AnimatePresence>
+        {showDrawer && (
+          <div className="absolute inset-0 z-50 flex pointer-events-auto overflow-hidden">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowDrawer(false)}
+              className="absolute inset-0 bg-black/75 backdrop-blur-sm cursor-pointer"
+            />
+
+            {/* Sliding Panel */}
+            <motion.div
+              initial={{ x: "-100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "-100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              className={`relative w-[82%] max-w-[320px] h-full flex flex-col shadow-2xl z-10 overflow-hidden ${
+                darkMode ? "bg-[#0c0c0e] text-white border-r border-zinc-800" : "bg-white text-slate-900 border-r border-slate-200"
+              }`}
+            >
+              {/* Drawer Header */}
+              <div className={`p-4 border-b flex items-center justify-between shrink-0 ${
+                darkMode ? "bg-[#111115] border-zinc-800" : "bg-slate-50 border-slate-200"
+              }`}>
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 bg-[#FFD700] rounded-xl flex items-center justify-center text-black font-extrabold shadow-md shrink-0">
+                    <Zap size={18} className="fill-black" />
+                  </div>
+                  <div>
+                    <h2 className="font-extrabold text-sm tracking-tight font-display flex items-center gap-1.5">
+                      BeuVerify <span className="text-amber-500 text-[10px] font-mono px-1.5 py-0.2 bg-amber-400/10 border border-amber-400/30 rounded uppercase">{activePlan}</span>
+                    </h2>
+                    <p className={`text-[10px] ${darkMode ? "text-zinc-400" : "text-slate-500"}`}>{userName} • Financial Node</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowDrawer(false)}
+                  className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                    darkMode ? "bg-zinc-800/80 border-zinc-700 text-zinc-300 hover:text-white" : "bg-slate-200 border-slate-300 text-slate-700 hover:text-black"
+                  }`}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Scrollable Navigation Body */}
+              <div className="flex-1 overflow-y-auto p-3 space-y-4 scrollbar-none">
+                {/* Active Credits Card */}
+                <div 
+                  onClick={() => { setSubScreen("topup"); setShowDrawer(false); }}
+                  className="p-3 bg-gradient-to-r from-amber-500/10 via-amber-400/5 to-transparent border border-amber-400/30 rounded-xl flex items-center justify-between cursor-pointer hover:border-amber-400 transition-all"
+                >
+                  <div>
+                    <span className="text-[10px] text-amber-500 font-extrabold uppercase tracking-wider block font-mono">Active Balance</span>
+                    <span className="text-base font-black font-mono">{userCredits} Credits</span>
+                  </div>
+                  <span className="px-2 py-1 bg-[#FFD700] text-black text-[10px] font-extrabold rounded-lg uppercase tracking-wider flex items-center gap-1 shadow-sm">
+                    <Coins size={11} />
+                    Upgrade
+                  </span>
+                </div>
+
+                {/* Primary Nav Menu */}
+                <div className="space-y-1">
+                  <span className={`text-[10px] font-extrabold uppercase tracking-wider px-2 ${darkMode ? "text-zinc-500" : "text-slate-400"}`}>
+                    Navigation Menu
+                  </span>
+                  
+                  <button
+                    onClick={() => { setActiveTab("home"); setSubScreen("none"); setShowDrawer(false); }}
+                    className={`w-full p-2.5 rounded-xl flex items-center gap-3 text-xs font-bold transition-all cursor-pointer ${
+                      activeTab === "home" && subScreen === "none" 
+                        ? "bg-amber-400 text-black shadow-sm font-extrabold" 
+                        : darkMode ? "hover:bg-zinc-800/80 text-zinc-200" : "hover:bg-slate-100 text-slate-800"
+                    }`}
+                  >
+                    <Home size={16} />
+                    <span>Home Dashboard</span>
+                  </button>
+
+                  <button
+                    onClick={() => { setActiveTab("scan"); setScanTabMode("manual"); setSubScreen("none"); setShowDrawer(false); }}
+                    className={`w-full p-2.5 rounded-xl flex items-center gap-3 text-xs font-bold transition-all cursor-pointer ${
+                      activeTab === "scan" && scanTabMode === "manual" && subScreen === "none"
+                        ? "bg-amber-400 text-black shadow-sm font-extrabold" 
+                        : darkMode ? "hover:bg-zinc-800/80 text-zinc-200" : "hover:bg-slate-100 text-slate-800"
+                    }`}
+                  >
+                    <Zap size={16} className="text-amber-500 fill-amber-500" />
+                    <span>Manual Verification</span>
+                  </button>
+
+                  <button
+                    onClick={() => { setActiveTab("scan"); setScanTabMode("camera"); setSubScreen("none"); setShowDrawer(false); }}
+                    className={`w-full p-2.5 rounded-xl flex items-center gap-3 text-xs font-bold transition-all cursor-pointer ${
+                      activeTab === "scan" && scanTabMode === "camera" && subScreen === "none"
+                        ? "bg-amber-400 text-black shadow-sm font-extrabold" 
+                        : darkMode ? "hover:bg-zinc-800/80 text-zinc-200" : "hover:bg-slate-100 text-slate-800"
+                    }`}
+                  >
+                    <Camera size={16} className="text-amber-400" />
+                    <span>CBE QR Code Scanner</span>
+                  </button>
+
+                  <button
+                    onClick={() => { setSubScreen("topup"); setShowDrawer(false); }}
+                    className={`w-full p-2.5 rounded-xl flex items-center gap-3 text-xs font-bold transition-all cursor-pointer ${
+                      subScreen === "topup"
+                        ? "bg-amber-400 text-black shadow-sm font-extrabold" 
+                        : darkMode ? "hover:bg-zinc-800/80 text-zinc-200" : "hover:bg-slate-100 text-slate-800"
+                    }`}
+                  >
+                    <Coins size={16} className="text-amber-400" />
+                    <span>Upgrade Credit Package</span>
+                  </button>
+
+                  <button
+                    onClick={() => { setActiveTab("history"); setSubScreen("none"); setShowDrawer(false); }}
+                    className={`w-full p-2.5 rounded-xl flex items-center gap-3 text-xs font-bold transition-all cursor-pointer ${
+                      activeTab === "history" && subScreen === "none"
+                        ? "bg-amber-400 text-black shadow-sm font-extrabold" 
+                        : darkMode ? "hover:bg-zinc-800/80 text-zinc-200" : "hover:bg-slate-100 text-slate-800"
+                    }`}
+                  >
+                    <HistoryIcon size={16} />
+                    <span>Verification Log History</span>
+                  </button>
+
+                  <button
+                    onClick={() => { setActiveTab("analytics"); setSubScreen("none"); setShowDrawer(false); }}
+                    className={`w-full p-2.5 rounded-xl flex items-center gap-3 text-xs font-bold transition-all cursor-pointer ${
+                      activeTab === "analytics" && subScreen === "none"
+                        ? "bg-amber-400 text-black shadow-sm font-extrabold" 
+                        : darkMode ? "hover:bg-zinc-800/80 text-zinc-200" : "hover:bg-slate-100 text-slate-800"
+                    }`}
+                  >
+                    <BarChart3 size={16} />
+                    <span>Analytics & Reports</span>
+                  </button>
+
+                  <button
+                    onClick={() => { setSubScreen("settings"); setShowDrawer(false); }}
+                    className={`w-full p-2.5 rounded-xl flex items-center gap-3 text-xs font-bold transition-all cursor-pointer ${
+                      subScreen === "settings"
+                        ? "bg-amber-400 text-black shadow-sm font-extrabold" 
+                        : darkMode ? "hover:bg-zinc-800/80 text-zinc-200" : "hover:bg-slate-100 text-slate-800"
+                    }`}
+                  >
+                    <SettingsIcon size={16} />
+                    <span>Settings & Security</span>
+                  </button>
+
+                  <button
+                    onClick={() => { setSecurityModalMode("unlock"); setShowSecurityModal(true); setShowDrawer(false); }}
+                    className="w-full p-2.5 rounded-xl flex items-center gap-3 text-xs font-bold text-amber-500 hover:bg-amber-400/10 transition-all cursor-pointer"
+                  >
+                    <Lock size={16} />
+                    <span>Lock App (Biometric/PIN)</span>
+                  </button>
+                </div>
+
+                {/* Preferences Quick Toggles */}
+                <div className="space-y-1 pt-2 border-t border-zinc-800/60">
+                  <span className={`text-[10px] font-extrabold uppercase tracking-wider px-2 ${darkMode ? "text-zinc-500" : "text-slate-400"}`}>
+                    Preferences
+                  </span>
+
+                  {/* Morning Light / Dark Mode toggle */}
+                  <div className={`p-2.5 rounded-xl flex items-center justify-between text-xs font-bold ${
+                    darkMode ? "bg-zinc-900/60 border border-zinc-800/80" : "bg-slate-100 border border-slate-200"
+                  }`}>
+                    <div className="flex items-center gap-2">
+                      {darkMode ? <Sun size={15} className="text-amber-400 fill-amber-400" /> : <Moon size={15} className="text-slate-700 fill-slate-700" />}
+                      <span>{darkMode ? "Night Mode (Dark)" : "Morning Mode (Light)"}</span>
+                    </div>
+                    <button
+                      onClick={() => setDarkMode(!darkMode)}
+                      className="px-2.5 py-1 bg-amber-400 hover:bg-amber-300 text-black text-[10px] font-extrabold rounded-lg uppercase cursor-pointer"
+                    >
+                      Toggle
+                    </button>
+                  </div>
+
+                  {/* Language switch */}
+                  <div className={`p-2.5 rounded-xl flex items-center justify-between text-xs font-bold ${
+                    darkMode ? "bg-zinc-900/60 border border-zinc-800/80" : "bg-slate-100 border border-slate-200"
+                  }`}>
+                    <div className="flex items-center gap-2">
+                      <Globe size={15} className="text-amber-500" />
+                      <span>Language ({locale === "en" ? "English" : "አማርኛ"})</span>
+                    </div>
+                    <button
+                      onClick={() => onLanguageChange(locale === "en" ? "am" : "en")}
+                      className="px-2.5 py-1 bg-zinc-800 text-amber-300 border border-zinc-700 text-[10px] font-extrabold rounded-lg uppercase cursor-pointer"
+                    >
+                      {locale === "en" ? "Switch to AM" : "Switch to EN"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* About & Policies */}
+                <div className="space-y-1 pt-2 border-t border-zinc-800/60 text-[11px] font-bold">
+                  <button onClick={() => { setSubScreen("about"); setShowDrawer(false); }} className={`w-full p-2 rounded-lg text-left flex items-center gap-2 cursor-pointer ${darkMode ? "text-zinc-400 hover:text-white" : "text-slate-600 hover:text-black"}`}>
+                    <Info size={14} />
+                    <span>About BeuVerify</span>
+                  </button>
+                  <button onClick={() => { setSubScreen("privacy"); setShowDrawer(false); }} className={`w-full p-2 rounded-lg text-left flex items-center gap-2 cursor-pointer ${darkMode ? "text-zinc-400 hover:text-white" : "text-slate-600 hover:text-black"}`}>
+                    <Shield size={14} />
+                    <span>Privacy Policy</span>
+                  </button>
+                  <button onClick={() => { setSubScreen("terms"); setShowDrawer(false); }} className={`w-full p-2 rounded-lg text-left flex items-center gap-2 cursor-pointer ${darkMode ? "text-zinc-400 hover:text-white" : "text-slate-600 hover:text-black"}`}>
+                    <FileText size={14} />
+                    <span>Terms of Service</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Drawer Footer */}
+              <div className={`p-3 border-t text-center shrink-0 ${darkMode ? "bg-[#111115] border-zinc-800 text-zinc-500" : "bg-slate-50 border-slate-200 text-slate-500"}`}>
+                <p className="text-[10px] font-mono font-bold">BeuVerify Engine v2.4 • Secured Node</p>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* 10. FINGERPRINT & PIN SECURITY LOCK MODAL */}
       <BiometricPinLock

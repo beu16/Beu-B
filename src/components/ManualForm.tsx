@@ -13,6 +13,7 @@ interface ManualFormProps {
   prefilledReference?: string;
   themeConfig: ThemeConfig;
   t: any;
+  onSwitchToScan?: () => void;
 }
 
 const SUPPORTED_BANKS = [
@@ -27,12 +28,14 @@ const SUPPORTED_BANKS = [
   { id: "siinqee", name: "Siinqee Bank", placeholder: "Reference Number or Receipt Link" }
 ];
 
-export default function ManualForm({ onVerify, isLoading, prefilledReference = "", themeConfig, t }: ManualFormProps) {
+export default function ManualForm({ onVerify, isLoading, prefilledReference = "", themeConfig, t, onSwitchToScan }: ManualFormProps) {
   const [bank, setBank] = useState("universal");
   const [reference, setReference] = useState(prefilledReference);
   const [suffix, setSuffix] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
+
+  const isLight = themeConfig?.mode === "light";
 
   // Sync prefilled reference from QR scan
   React.useEffect(() => {
@@ -49,7 +52,12 @@ export default function ManualForm({ onVerify, isLoading, prefilledReference = "
         if (errors.reference) setErrors(prev => ({ ...prev, reference: "" }));
       }
     } catch (e) {
-      // Clipboard read fallback if denied
+      // Fallback prompt if clipboard permissions restricted in iframe
+      const manualPaste = prompt("Paste your receipt link or SMS text here:");
+      if (manualPaste) {
+        setReference(manualPaste);
+        if (errors.reference) setErrors(prev => ({ ...prev, reference: "" }));
+      }
     }
   };
 
@@ -57,12 +65,17 @@ export default function ManualForm({ onVerify, isLoading, prefilledReference = "
     e.preventDefault();
     const newErrors: { [key: string]: string } = {};
 
-    if (!reference.trim()) {
-      newErrors.reference = t.errorRefRequired;
-    }
-
-    if (bank === "boa" && suffix.trim() && suffix.trim().length !== 5) {
-      newErrors.suffix = t.errorBOASuffix;
+    if (bank === "boa") {
+      if (!reference.trim()) {
+        newErrors.reference = t.errorRefRequired;
+      } else if (!reference.trim().toUpperCase().startsWith("FT")) {
+        newErrors.reference = "BOA reference number must start with FT (e.g. FT12345678)";
+      }
+      if (!suffix.trim()) {
+        newErrors.suffix = "Sender account number is required";
+      } else if (suffix.trim().length < 5) {
+        newErrors.suffix = "Account number must be at least 5 digits";
+      }
     }
 
     if (bank === "cbe" && suffix.trim() && suffix.trim().length !== 8) {
@@ -82,10 +95,14 @@ export default function ManualForm({ onVerify, isLoading, prefilledReference = "
     }
 
     setErrors({});
+    const processedSuffix = bank === "boa" && suffix.trim() 
+      ? suffix.trim().slice(-5) 
+      : suffix.trim() || undefined;
+
     onVerify({
       bank,
       reference: reference.trim(),
-      suffix: suffix.trim() || undefined,
+      suffix: processedSuffix,
       phoneNumber: phoneNumber.trim() || undefined
     });
   };
@@ -93,30 +110,49 @@ export default function ManualForm({ onVerify, isLoading, prefilledReference = "
   const selectedBankInfo = SUPPORTED_BANKS.find(b => b.id === bank);
 
   return (
-    <form id="manual-verify-form" onSubmit={handleSubmit} className="w-full bg-[#111114] border border-amber-400/30 rounded-2xl p-4 shadow-xl flex flex-col gap-3.5 text-left">
-      <div className="border-b border-zinc-800/80 pb-2.5 flex items-center justify-between">
-        <h3 className="font-extrabold text-xs tracking-wider uppercase flex items-center gap-1.5 font-display text-white">
-          <Zap size={14} className="text-[#FFD700] fill-[#FFD700]" />
-          <span>Manual Entry Verification</span>
+    <form 
+      id="manual-verify-form" 
+      onSubmit={handleSubmit} 
+      className={`w-full border rounded-2xl p-4 shadow-xl flex flex-col gap-3.5 text-left transition-all ${
+        isLight 
+          ? "bg-white border-slate-200 text-slate-900 shadow-sm" 
+          : "bg-[#111114] border-amber-400/30 text-white"
+      }`}
+    >
+      <div className={`border-b pb-2.5 flex items-center justify-between ${isLight ? "border-slate-100" : "border-zinc-800/80"}`}>
+        <h3 className={`font-extrabold text-xs tracking-wider uppercase flex items-center gap-1.5 font-display ${isLight ? "text-slate-900" : "text-white"}`}>
+          <Zap size={15} className="text-[#FFD700] fill-[#FFD700]" />
+          <span>MANUAL ENTRY VERIFICATION</span>
         </h3>
-        <span className="bg-amber-400/10 border border-amber-400/30 text-amber-300 px-2 py-0.5 rounded text-[9px] font-mono font-bold">
+        <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold border ${
+          isLight ? "bg-amber-100 border-amber-300 text-amber-800" : "bg-amber-400/10 border-amber-400/30 text-amber-300"
+        }`}>
           LIVE NODE
         </span>
       </div>
 
       {/* Select Bank / Wallet */}
       <div className="flex flex-col gap-1">
-        <label htmlFor="bank-select" className="text-zinc-400 text-[10px] font-extrabold tracking-wider uppercase">
-          {t.bankSelectLabel}
+        <label htmlFor="bank-select" className={`text-[10px] font-extrabold tracking-wider uppercase ${isLight ? "text-slate-600" : "text-zinc-400"}`}>
+          {t.bankSelectLabel || "ባንክ / የሂሳብ ፎርም ይምረጡ"}
         </label>
         <select
           id="bank-select"
           value={bank}
           onChange={(e) => {
-            setBank(e.target.value);
+            const selected = e.target.value;
+            setBank(selected);
             setErrors({});
+            if (selected === "cbe" && onSwitchToScan) {
+              // Trigger QR code scanner directly when CBE is selected
+              onSwitchToScan();
+            }
           }}
-          className="w-full px-3 py-2 bg-[#18181C] border border-zinc-800 focus:border-amber-400/80 rounded-xl text-xs font-semibold text-zinc-100 outline-none transition-all cursor-pointer"
+          className={`w-full px-3 py-2 border rounded-xl text-xs font-semibold outline-none transition-all cursor-pointer ${
+            isLight
+              ? "bg-slate-50 border-slate-300 text-slate-900 focus:border-amber-500 focus:bg-white"
+              : "bg-[#18181C] border-zinc-800 text-zinc-100 focus:border-amber-400/80"
+          }`}
         >
           {SUPPORTED_BANKS.map((b) => (
             <option key={b.id} value={b.id}>
@@ -126,18 +162,44 @@ export default function ManualForm({ onVerify, isLoading, prefilledReference = "
         </select>
       </div>
 
+      {/* Prominent CBE QR Scan Quick Switch Callout */}
+      {(bank === "cbe" || bank === "universal") && onSwitchToScan && (
+        <div className={`p-3 rounded-xl border flex items-center justify-between gap-2.5 transition-all ${
+          isLight ? "bg-amber-50 border-amber-300 text-amber-900" : "bg-amber-400/10 border-amber-400/40 text-amber-300"
+        }`}>
+          <div className="space-y-0.5">
+            <p className="text-[11px] font-extrabold uppercase flex items-center gap-1 font-display">
+              <Zap size={13} className="fill-amber-400 text-amber-400" />
+              <span>CBE Receipt QR Scanner</span>
+            </p>
+            <p className="text-[10px] text-zinc-400 font-normal">
+              Scan CBE printed or digital receipt QR codes instantly with your camera.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onSwitchToScan}
+            className="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-black font-extrabold text-[11px] rounded-lg shadow-sm shrink-0 uppercase tracking-wider cursor-pointer"
+          >
+            Scan QR Now
+          </button>
+        </div>
+      )}
+
       {/* Reference Input with Paste Button */}
       <div className="flex flex-col gap-1">
         <div className="flex items-center justify-between">
-          <label htmlFor="reference-input" className="text-zinc-400 text-[10px] font-extrabold tracking-wider uppercase">
-            {t.refInputLabel}
+          <label htmlFor="reference-input" className={`text-[10px] font-extrabold tracking-wider uppercase ${isLight ? "text-slate-600" : "text-zinc-400"}`}>
+            {t.refInputLabel || "ማመሳከሪያ ቁጥር ወይም ደረሰኝ ሊንክ"}
           </label>
           <button
             type="button"
             onClick={handlePasteClipboard}
-            className="flex items-center gap-1 text-[10px] text-amber-400 font-bold hover:text-amber-300 transition-colors"
+            className={`flex items-center gap-1 text-[10px] font-bold transition-colors ${
+              isLight ? "text-amber-600 hover:text-amber-700" : "text-amber-400 hover:text-amber-300"
+            }`}
           >
-            <Clipboard size={11} />
+            <Clipboard size={12} />
             <span>Paste</span>
           </button>
         </div>
@@ -148,25 +210,35 @@ export default function ManualForm({ onVerify, isLoading, prefilledReference = "
             setReference(e.target.value);
             if (errors.reference) setErrors(prev => ({ ...prev, reference: "" }));
           }}
-          placeholder={selectedBankInfo?.placeholder}
+          placeholder={selectedBankInfo?.placeholder || "CBE Receipt URL, SMS text, or Reference Code"}
           rows={2}
-          className="w-full px-3 py-2 bg-[#18181C] border border-zinc-800 focus:border-amber-400/80 rounded-xl text-xs text-zinc-100 placeholder-zinc-600 outline-none transition-all font-mono resize-none"
+          className={`w-full px-3 py-2 border rounded-xl text-xs outline-none transition-all font-mono resize-none ${
+            isLight
+              ? "bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400 focus:border-amber-500 focus:bg-white"
+              : "bg-[#18181C] border-zinc-800 text-zinc-100 placeholder-zinc-600 focus:border-amber-400/80"
+          }`}
         />
         {errors.reference && (
-          <span id="reference-error" className="text-rose-400 text-[10px] font-semibold">{errors.reference}</span>
+          <span id="reference-error" className="text-rose-500 text-[10px] font-semibold">{errors.reference}</span>
         )}
       </div>
 
       {/* Disambiguators (Suffix and Phone) based on bank selection */}
       {(bank === "boa" || bank === "cbe" || bank === "universal") && (
-        <div className="flex flex-col gap-1.5 p-2.5 bg-[#18181C] border border-zinc-800/80 rounded-xl">
+        <div className={`flex flex-col gap-1.5 p-3 border rounded-xl ${
+          isLight ? "bg-slate-50 border-slate-200" : "bg-[#18181C] border-zinc-800/80"
+        }`}>
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1 text-zinc-300 text-[10px] font-extrabold uppercase tracking-wider">
-              <EyeOff size={11} className="text-amber-400" />
-              <span>{t.accountSuffixLabel}</span>
+            <div className={`flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wider ${
+              isLight ? "text-slate-700" : "text-zinc-300"
+            }`}>
+              <EyeOff size={12} className="text-amber-500" />
+              <span>{bank === "boa" ? "Sender Full Account Number" : (t.accountSuffixLabel || "የሂሳብ ማጠቃለያ ቁጥር (አማራጭ)")}</span>
             </div>
-            <span className="text-[8px] px-1.5 py-0.2 rounded font-mono uppercase font-bold bg-zinc-800 text-zinc-400">
-              {bank === "boa" ? "5 Digits" : bank === "cbe" ? "8 Digits" : "Optional"}
+            <span className={`text-[8px] px-1.5 py-0.5 rounded font-mono uppercase font-bold border ${
+              isLight ? "bg-amber-100 border-amber-300 text-amber-800" : "bg-zinc-800 border-zinc-700 text-amber-300"
+            }`}>
+              {bank === "boa" ? "Auto-extract Last 5 Digits" : bank === "cbe" ? "8 Digits" : "OPTIONAL"}
             </span>
           </div>
           <input
@@ -177,22 +249,35 @@ export default function ManualForm({ onVerify, isLoading, prefilledReference = "
               setSuffix(e.target.value.replace(/\D/g, ""));
               if (errors.suffix) setErrors(prev => ({ ...prev, suffix: "" }));
             }}
-            maxLength={bank === "boa" ? 5 : bank === "cbe" ? 8 : 12}
-            placeholder={bank === "boa" ? "e.g., 54321" : bank === "cbe" ? "e.g., 10002345" : "e.g., 5-8 digits"}
-            className="w-full px-2.5 py-1.5 bg-[#111114] border border-zinc-800 focus:border-amber-400/80 rounded-lg text-xs text-zinc-100 placeholder-zinc-600 outline-none transition-all font-mono"
+            maxLength={bank === "boa" ? 20 : bank === "cbe" ? 8 : 12}
+            placeholder={bank === "boa" ? "e.g. 100012345678 (Full account number)" : (t.accountSuffixPlaceholder || "e.g., 5-8 digits")}
+            className={`w-full px-3 py-2 border rounded-lg text-xs outline-none transition-all font-mono ${
+              isLight
+                ? "bg-white border-slate-300 text-slate-900 placeholder-slate-400 focus:border-amber-500"
+                : "bg-[#111114] border-zinc-800 text-zinc-100 placeholder-zinc-600 focus:border-amber-400/80"
+            }`}
           />
+          {bank === "boa" && suffix.length >= 5 && (
+            <p className="text-[9px] text-amber-600 font-mono font-semibold">
+              ✓ Using last 5 digits: <span className="underline font-bold">{suffix.slice(-5)}</span>
+            </p>
+          )}
           {errors.suffix && (
-            <span id="suffix-error" className="text-rose-400 text-[10px] font-semibold">{errors.suffix}</span>
+            <span id="suffix-error" className="text-rose-500 text-[10px] font-semibold">{errors.suffix}</span>
           )}
         </div>
       )}
 
-      {/* CBE Birr needs Phone Number */}
+      {/* Phone Number Field */}
       {(bank === "cbebirr" || bank === "universal") && (
-        <div className="flex flex-col gap-1.5 p-2.5 bg-[#18181C] border border-zinc-800/80 rounded-xl">
-          <div className="flex items-center gap-1 text-zinc-300 text-[10px] font-extrabold uppercase tracking-wider">
-            <Smartphone size={11} className="text-amber-400" />
-            <span>{t.phoneLabel} {bank === "cbebirr" ? t.phoneRequired : t.phoneOptional}</span>
+        <div className={`flex flex-col gap-1.5 p-3 border rounded-xl ${
+          isLight ? "bg-slate-50 border-slate-200" : "bg-[#18181C] border-zinc-800/80"
+        }`}>
+          <div className={`flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wider ${
+            isLight ? "text-slate-700" : "text-zinc-300"
+          }`}>
+            <Smartphone size={12} className="text-amber-500" />
+            <span>{t.phoneLabel || "የከፋይ ስልክ ቁጥር (አማራጭ)"}</span>
           </div>
           <input
             type="tel"
@@ -202,11 +287,15 @@ export default function ManualForm({ onVerify, isLoading, prefilledReference = "
               setPhoneNumber(e.target.value);
               if (errors.phoneNumber) setErrors(prev => ({ ...prev, phoneNumber: "" }));
             }}
-            placeholder={t.phonePlaceholder || "e.g., 0912345678"}
-            className="w-full px-2.5 py-1.5 bg-[#111114] border border-zinc-800 focus:border-amber-400/80 rounded-lg text-xs text-zinc-100 placeholder-zinc-600 outline-none transition-all font-mono"
+            placeholder={t.phonePlaceholder || "ለማብራሪያ: 0912345678 ወይም 251912345678"}
+            className={`w-full px-3 py-2 border rounded-lg text-xs outline-none transition-all font-mono ${
+              isLight
+                ? "bg-white border-slate-300 text-slate-900 placeholder-slate-400 focus:border-amber-500"
+                : "bg-[#111114] border-zinc-800 text-zinc-100 placeholder-zinc-600 focus:border-amber-400/80"
+            }`}
           />
           {errors.phoneNumber && (
-            <span id="phone-error" className="text-rose-400 text-[10px] font-semibold">{errors.phoneNumber}</span>
+            <span id="phone-error" className="text-rose-500 text-[10px] font-semibold">{errors.phoneNumber}</span>
           )}
         </div>
       )}
@@ -216,7 +305,7 @@ export default function ManualForm({ onVerify, isLoading, prefilledReference = "
         type="submit"
         disabled={isLoading}
         id="verify-submit-btn"
-        className="w-full py-2.5 px-3 bg-[#FFD700] hover:bg-amber-300 text-black font-extrabold text-xs rounded-xl shadow-[0_0_15px_rgba(255,215,0,0.3)] transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-[0.98] disabled:opacity-50"
+        className="w-full py-3 px-3 bg-[#FFD700] hover:bg-amber-300 text-black font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-[0_0_15px_rgba(255,215,0,0.3)] transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-[0.98] disabled:opacity-50"
       >
         {isLoading ? (
           <>
@@ -229,7 +318,7 @@ export default function ManualForm({ onVerify, isLoading, prefilledReference = "
         ) : (
           <>
             <Zap size={14} className="fill-black" />
-            <span>Verify Reference Now</span>
+            <span>{t.verifyBtn || "Verify Reference Now"}</span>
           </>
         )}
       </button>

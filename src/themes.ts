@@ -1,5 +1,6 @@
 export interface ThemeConfig {
   id: "gold" | "slate" | "forest" | "cyber";
+  mode?: "light" | "dark";
   name: string;
   nameAmh: string;
   bg: string;          // Main window background

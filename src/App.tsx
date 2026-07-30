@@ -546,13 +546,13 @@ export default function App() {
   if (!user) {
     return (
       <AndroidFrame locale={locale}>
-        <div className="w-full h-full bg-[#070709] text-white flex flex-col items-center justify-center p-4 relative">
+        <div className="w-full h-full min-h-screen min-h-[100dvh] bg-[#070709] text-white flex flex-col p-4 relative overflow-y-auto">
           {/* Language selector in header */}
-          <div className="absolute top-4 right-4 flex items-center gap-1.5 z-20">
+          <div className="flex items-center justify-end w-full mb-1 shrink-0 z-20">
             <select
               value={locale}
               onChange={(e) => handleSelectLanguage(e.target.value as Locale)}
-              className="bg-zinc-900 border border-zinc-800 text-[10px] text-amber-400 font-extrabold py-1 px-2 rounded-lg focus:outline-none cursor-pointer font-mono"
+              className="bg-zinc-900 border border-zinc-800 text-[10px] text-amber-400 font-extrabold py-1 px-2.5 rounded-lg focus:outline-none cursor-pointer font-mono"
             >
               <option value="am">አማርኛ</option>
               <option value="en">English</option>
@@ -661,7 +661,7 @@ export default function App() {
         locale={locale}
         onLanguageChange={(lang) => handleSelectLanguage(lang)}
         logs={logs}
-        onVerifyReference={(ref, bank, suffix, phoneNumber) => handleVerify({ reference: ref, bank, suffix, phoneNumber })}
+        onVerifyReference={(ref, bank, suffix, phoneNumber) => { handleVerify({ reference: ref, bank, suffix, phoneNumber }); }}
         currentVerification={currentVerification}
         setCurrentVerification={setCurrentVerification}
         isLoadingVerification={isLoading}
