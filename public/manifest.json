@@ -6,7 +6,7 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "display_override": ["standalone", "minimal-ui", "window-controls-overlay"],
+  "display_override": ["standalone", "minimal-ui"],
   "orientation": "any",
   "background_color": "#070709",
   "theme_color": "#FFD700",
@@ -15,7 +15,6 @@
   "categories": ["finance", "business", "utilities"],
   "iarc_rating_id": "e84b0754-72b6-418b-ae04-2b2829286d11",
   "prefer_related_applications": false,
-  "related_applications": [],
   "screenshots": [
     {
       "src": "/screenshot-mobile.png",
@@ -65,7 +64,7 @@
     }
   ],
   "launch_handler": {
-    "client_mode": ["focus-existing", "navigate-new"]
+    "client_mode": "focus-existing"
   },
   "share_target": {
     "action": "/?action=share",
@@ -92,35 +91,9 @@
       "url": "/?verify=%s"
     }
   ],
-  "widgets": [
-    {
-      "name": "Quick Receipt Scanner",
-      "short_name": "Scanner",
-      "description": "Scan bank receipt QR code instantly",
-      "tag": "scanner-widget",
-      "template": "widget-template",
-      "ms_ac_template": "widget.json",
-      "data": "widget-data.json",
-      "type": "image/png",
-      "screenshots": [
-        {
-          "src": "/screenshot-mobile.png",
-          "sizes": "750x1334"
-        }
-      ]
-    }
-  ],
   "edge_side_panel": {
     "preferred_width": 400
   },
-  "note_taking": {
-    "new_note_url": "/?action=new_verify"
-  },
-  "scope_extensions": [
-    {
-      "origin": "*.beuverify.app"
-    }
-  ],
   "shortcuts": [
     {
       "name": "Scan Receipt",
@@ -138,3 +111,4 @@
     }
   ]
 }
+
