@@ -1,16 +1,65 @@
 {
+  "id": "/",
+  "name": "Beu Verify - Smart Bank Receipt & SMS Verification",
   "short_name": "BeuVerify",
-  "name": "BeuVerify - Fintech Receipt Verification Node App",
+  "description": "Secure bank receipt verification platform for Ethiopian banks (CBE, Telebirr, BOA, Dashen) with real-time QR code scanning and fraud detection.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "background_color": "#070709",
+  "theme_color": "#FFD700",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["finance", "business", "utilities"],
+  "prefer_related_applications": false,
   "icons": [
     {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
       "src": "/favicon.svg",
-      "sizes": "192x192 512x512",
-      "type": "image/svg+xml"
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
     }
   ],
-  "start_url": "/",
-  "background_color": "#000000",
-  "theme_color": "#FFD700",
-  "display": "standalone",
-  "orientation": "portrait"
+  "shortcuts": [
+    {
+      "name": "Scan Receipt",
+      "short_name": "Scan",
+      "description": "Scan a bank receipt QR code instantly",
+      "url": "/?action=scan",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Verify SMS",
+      "short_name": "Verify SMS",
+      "description": "Verify bank notification SMS",
+      "url": "/?action=sms",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
 }
