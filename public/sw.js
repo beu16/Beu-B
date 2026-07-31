@@ -58,6 +58,13 @@ self.addEventListener('sync', (event) => {
   }
 });
 
+// Periodic Sync capability
+self.addEventListener('periodicsync', (event) => {
+  if (event.tag === 'update-rates') {
+    event.waitUntil(Promise.resolve());
+  }
+});
+
 // Push Notifications capability
 self.addEventListener('push', (event) => {
   const data = event.data ? event.data.text() : 'Beu Verify Notification';

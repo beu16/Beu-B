@@ -2,18 +2,20 @@
   "id": "/",
   "name": "Beu Verify - Smart Bank Receipt & SMS Verification",
   "short_name": "BeuVerify",
-  "description": "Secure bank receipt verification platform for Ethiopian banks (CBE, Telebirr, BOA, Dashen) with real-time QR code scanning and fraud detection.",
+  "description": "Secure bank receipt verification platform for Ethiopian banks (CBE, Telebirr, BOA, Dashen) with real-time QR code scanning, SMS verification, and fraud detection.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "display_override": ["standalone", "minimal-ui"],
-  "orientation": "portrait",
+  "display_override": ["standalone", "minimal-ui", "window-controls-overlay"],
+  "orientation": "any",
   "background_color": "#070709",
   "theme_color": "#FFD700",
   "lang": "en",
   "dir": "ltr",
   "categories": ["finance", "business", "utilities"],
+  "iarc_rating_id": "e84b0754-72b6-418b-ae04-2b2829286d11",
   "prefer_related_applications": false,
+  "related_applications": [],
   "screenshots": [
     {
       "src": "/screenshot-mobile.png",
@@ -60,6 +62,63 @@
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
+    }
+  ],
+  "launch_handler": {
+    "client_mode": ["focus-existing", "navigate-new"]
+  },
+  "share_target": {
+    "action": "/?action=share",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
+  "file_handlers": [
+    {
+      "action": "/?action=file",
+      "accept": {
+        "image/png": [".png"],
+        "image/jpeg": [".jpg", ".jpeg"],
+        "application/pdf": [".pdf"]
+      }
+    }
+  ],
+  "protocol_handlers": [
+    {
+      "protocol": "web+beuverify",
+      "url": "/?verify=%s"
+    }
+  ],
+  "widgets": [
+    {
+      "name": "Quick Receipt Scanner",
+      "short_name": "Scanner",
+      "description": "Scan bank receipt QR code instantly",
+      "tag": "scanner-widget",
+      "template": "widget-template",
+      "ms_ac_template": "widget.json",
+      "data": "widget-data.json",
+      "type": "image/png",
+      "screenshots": [
+        {
+          "src": "/screenshot-mobile.png",
+          "sizes": "750x1334"
+        }
+      ]
+    }
+  ],
+  "edge_side_panel": {
+    "preferred_width": 400
+  },
+  "note_taking": {
+    "new_note_url": "/?action=new_verify"
+  },
+  "scope_extensions": [
+    {
+      "origin": "*.beuverify.app"
     }
   ],
   "shortcuts": [
