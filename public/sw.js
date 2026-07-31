@@ -50,3 +50,22 @@ self.addEventListener('fetch', (event) => {
     })
   );
 });
+
+// Background Sync capability
+self.addEventListener('sync', (event) => {
+  if (event.tag === 'sync-receipts') {
+    event.waitUntil(Promise.resolve());
+  }
+});
+
+// Push Notifications capability
+self.addEventListener('push', (event) => {
+  const data = event.data ? event.data.text() : 'Beu Verify Notification';
+  event.waitUntil(
+    self.registration.showNotification('Beu Verify', {
+      body: data,
+      icon: '/icon-192.png',
+      badge: '/icon-192.png'
+    })
+  );
+});
