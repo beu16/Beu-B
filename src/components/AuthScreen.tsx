@@ -154,7 +154,15 @@ export default function AuthScreen({ onAuthSuccess, locale, t }: AuthScreenProps
 
       if (data.success) {
         setEmailForVerification(email);
-        setSuccess(locale === "am" ? "ምዝገባው ተጠናቋል! የማረጋገጫ ኮድ ወደ ኢሜልዎ ተልኳል" : "Registration success! Verification code dispatched to your email.");
+        if (data.verificationCode) {
+          setVerificationCode(data.verificationCode);
+        }
+        
+        const successMessage = data.emailSent
+          ? (locale === "am" ? "ምዝገባው ተጠናቋል! የማረጋገጫ ኮድ ወደ ኢሜልዎ ተልኳል" : "Registration success! Verification code dispatched to your email.")
+          : (locale === "am" ? `ምዝገባው ተጠናቋል! የማረጋገጫ ኮድ: ${data.verificationCode || ""}` : `Account created! Verification code: ${data.verificationCode || ""}`);
+        
+        setSuccess(successMessage);
         setTimeout(() => {
           setShowCodeVerification(true);
           setError(null);

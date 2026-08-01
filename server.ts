@@ -737,12 +737,16 @@ app.post("/api/auth/signup", authLimiter, async (req, res) => {
     console.log("[signup] Sending verification email via Brevo...");
     const emailSent = await sendVerificationEmail(email, ownerName, code);
 
-    console.log("[signup] Signup successful. User record ID:", newUser.id);
+    console.log("[signup] Signup successful. User record ID:", newUser.id, "emailSent:", emailSent);
     res.status(200).json({
       success: true,
-      message: "Signup successful. Verification email dispatched.",
+      message: emailSent
+        ? "Signup successful. Verification code sent to your email."
+        : `Account created. Verification code generated: ${code}`,
       email: email,
-      emailSent: emailSent
+      emailSent: emailSent,
+      // Provide code fallback if Brevo email delivery failed or skipped
+      verificationCode: emailSent ? undefined : code
     });
   } catch (error: any) {
     console.error("Error in POST /api/auth/signup:", error.message);
