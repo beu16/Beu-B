@@ -124,20 +124,31 @@ const APP_NAME = process.env.APP_NAME || "Beu Verify";
 const JWT_SECRET = process.env.JWT_SECRET || "default_jwt_secret";
 const SESSION_SECRET = process.env.SESSION_SECRET || "default_session_secret";
 
-// Helper: Send Brevo verification email
+// Helper: Send Brevo combined welcome & verification email
 async function sendVerificationEmail(email: string, name: string, code: string) {
   try {
+    const apiKey = process.env.BREVO_API_KEY || BREVO_API_KEY;
+    const senderEmail = process.env.BREVO_SENDER_EMAIL || process.env.ADMIN_EMAIL || SENDER_EMAIL || "infobeutech@gmail.com";
+    const senderName = process.env.BREVO_SENDER_NAME || SENDER_NAME || "Beu Verify";
+
+    if (!apiKey) {
+      console.warn("[Brevo Signup Email] BREVO_API_KEY is missing from environment. Email dispatch skipped.");
+      return false;
+    }
+
+    console.log(`[Brevo Signup Email] Dispatching combined welcome & code email to ${email} via sender ${senderEmail}...`);
+
     const response = await fetch("https://api.brevo.com/v3/smtp/email", {
       method: "POST",
       headers: {
         "accept": "application/json",
-        "api-key": BREVO_API_KEY,
+        "api-key": apiKey,
         "content-type": "application/json"
       },
       body: JSON.stringify({
         sender: {
-          name: SENDER_NAME,
-          email: SENDER_EMAIL
+          name: senderName,
+          email: senderEmail
         },
         to: [
           {
@@ -145,34 +156,48 @@ async function sendVerificationEmail(email: string, name: string, code: string) 
             name: name
           }
         ],
-        subject: `Welcome to ${APP_NAME} - Here is your Verification Code`,
+        subject: `⚡ Welcome to ${APP_NAME}! Your Verification Code is ${code}`,
         htmlContent: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 25px; border: 1px solid #222; border-radius: 12px; background-color: #000000; color: #ffffff;">
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 30px; border-radius: 16px; background-color: #0c0c0e; color: #ffffff; border: 1px solid #222228; box-shadow: 0 10px 40px rgba(0,0,0,0.8);">
             <div style="text-align: center; margin-bottom: 30px;">
-              <div style="display: inline-block; width: 60px; height: 60px; background-color: #ffd700; border-radius: 14px; padding: 10px; box-shadow: 0 4px 15px rgba(255, 215, 0, 0.3);">
+              <div style="display: inline-block; width: 64px; height: 64px; background-color: #ffd700; border-radius: 18px; padding: 12px; box-shadow: 0 0 25px rgba(255, 215, 0, 0.4);">
                 <svg xmlns="http://www.w3.org/2000/svg" style="width: 40px; height: 40px; fill: #000;" viewBox="0 0 24 24">
                   <path d="M13 10V3L4 14h7v7l9-11h-7z" fill="#000" />
                 </svg>
               </div>
-              <h1 style="color: #ffd700; margin-top: 15px; font-size: 28px; font-weight: 900; letter-spacing: -0.5px;">${APP_NAME}</h1>
-              <p style="color: #888; font-size: 14px; margin: 5px 0 0 0;">Transaction Verification Platform</p>
+              <h1 style="color: #ffffff; margin-top: 15px; font-size: 28px; font-weight: 900; letter-spacing: -0.5px;">Beu<span style="color: #ffd700;">Verify</span></h1>
+              <p style="color: #888899; font-size: 13px; margin: 4px 0 0 0; font-weight: 500;">Smart Ethiopian Bank & Telebirr Verification Platform</p>
             </div>
             
-            <div style="background-color: #111111; padding: 25px; border-radius: 8px; border: 1px solid #ffd700/20; border-left: 5px solid #ffd700; margin-bottom: 25px;">
-              <p style="font-size: 16px; margin-top: 0; color: #ffffff;">Hello <strong>${name}</strong>,</p>
-              <p style="font-size: 15px; line-height: 1.6; color: #cccccc;">Welcome to <strong>${APP_NAME}</strong>! Your premium, automated transaction and payment verification workspace.</p>
-              <p style="font-size: 15px; line-height: 1.6; color: #cccccc;">Use the 6-digit confirmation code below to verify your business email address and activate your account:</p>
-              
-              <div style="text-align: center; margin: 35px 0;">
-                <span style="font-size: 36px; font-weight: 900; letter-spacing: 6px; color: #ffd700; background-color: #050505; padding: 12px 30px; border-radius: 8px; border: 2px solid #ffd700; display: inline-block; font-family: 'Courier New', Courier, monospace;">${code}</span>
+            <div style="background-color: #141418; padding: 28px; border-radius: 12px; border: 1px solid rgba(255, 215, 0, 0.3); border-left: 5px solid #ffd700; margin-bottom: 25px;">
+              <h2 style="color: #ffd700; font-size: 20px; font-weight: 800; margin-top: 0; margin-bottom: 12px;">Welcome aboard, ${name}! 👋</h2>
+              <p style="font-size: 15px; line-height: 1.6; color: #dddddd; margin-bottom: 16px;">
+                Thank you for registering your business with <strong>${APP_NAME}</strong>. We're excited to have you join Ethiopia's leading automated transaction verification network.
+              </p>
+              <p style="font-size: 14px; line-height: 1.6; color: #aaaaaa; margin-bottom: 24px;">
+                To complete your setup and activate your merchant workspace, please enter the 6-digit confirmation code below:
+              </p>
+
+              <div style="text-align: center; margin: 30px 0;">
+                <div style="display: inline-block; background-color: #050507; padding: 16px 36px; border-radius: 12px; border: 2px solid #ffd700; box-shadow: 0 0 20px rgba(255, 215, 0, 0.25);">
+                  <span style="font-size: 38px; font-weight: 900; letter-spacing: 8px; color: #ffd700; font-family: 'Courier New', Courier, monospace; display: block;">${code}</span>
+                </div>
+                <p style="font-size: 12px; color: #888888; margin-top: 12px; font-weight: 500;">⏱️ Code valid for 15 minutes</p>
               </div>
-              
-              <p style="font-size: 13px; color: #666666; margin-bottom: 0; border-top: 1px solid #222; padding-top: 15px;">This security code is strictly valid for 15 minutes. If you did not sign up for ${APP_NAME}, please ignore this communication.</p>
+
+              <div style="background-color: #0c0c0e; padding: 16px; border-radius: 8px; border: 1px solid #222; margin-top: 20px;">
+                <p style="font-size: 13px; color: #ffd700; margin: 0 0 6px 0; font-weight: bold;">⚡ What you can do with ${APP_NAME}:</p>
+                <ul style="font-size: 12px; color: #cccccc; margin: 0; padding-left: 18px; line-height: 1.7;">
+                  <li>Instantly verify Telebirr, CBE, Awash, & Bank receipts by Reference ID or QR</li>
+                  <li>Automated SMS notification verification for Ethiopian merchants</li>
+                  <li>Protect your business from fake screenshot scams & duplicate payments</li>
+                </ul>
+              </div>
             </div>
-            
-            <div style="text-align: center; font-size: 11px; color: #555555; line-height: 1.5; border-top: 1px solid #111; padding-top: 20px;">
-              <p style="margin: 0 0 5px 0;">This email was sent to ${email} to complete your register flow.</p>
-              <p style="margin: 0;">&copy; 2026 ${APP_NAME} Payments Corp. &bull; ${SENDER_EMAIL} &bull; Addis Ababa, Ethiopia</p>
+
+            <div style="text-align: center; font-size: 11px; color: #555566; line-height: 1.6; border-top: 1px solid #1a1a20; padding-top: 20px;">
+              <p style="margin: 0 0 4px 0;">This email was automatically sent to <strong>${email}</strong> upon registration.</p>
+              <p style="margin: 0;">&copy; 2026 ${APP_NAME} Payments Node &bull; ${senderEmail} &bull; Addis Ababa, Ethiopia</p>
             </div>
           </div>
         `
@@ -180,10 +205,10 @@ async function sendVerificationEmail(email: string, name: string, code: string) 
     });
     
     const text = await response.text();
-    console.log("Brevo email dispatched. Status:", response.status, text);
+    console.log("[Brevo Signup Email] Dispatch status:", response.status, text);
     return response.status === 200 || response.status === 201;
-  } catch (err) {
-    console.error("Brevo API Connection failure:", err);
+  } catch (err: any) {
+    console.error("[Brevo Signup Email] Connection failure:", err?.message || err);
     return false;
   }
 }
