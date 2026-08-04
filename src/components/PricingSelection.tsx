@@ -78,24 +78,25 @@ export default function PricingSelection({ user, onPaymentVerified, onLogout, lo
   const handleSelectPlan = async (plan: typeof PLANS[0]) => {
     setIsLoading(true);
     setError(null);
+    
+    // Always transition immediately to payment view so user is never stuck
+    setSelectedPlan(plan);
+    setStep("payment");
+
     try {
-      const response = await fetch(getApiUrl("/api/subscription/select-plan"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          plan: plan.id
-        })
-      });
-      const data = await response.json();
-      if (data.success) {
-        setSelectedPlan(plan);
-        setStep("payment");
-      } else {
-        setError(data.message);
+      const userId = user?.id || user?.userId;
+      if (userId) {
+        await fetch(getApiUrl("/api/subscription/select-plan"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: userId,
+            plan: plan.id
+          })
+        });
       }
     } catch (err) {
-      setError(locale === "am" ? "እቅድ መምረጥ አልተቻለም" : "Could not select plan due to network issue.");
+      console.warn("Background plan selection network note:", err);
     } finally {
       setIsLoading(false);
     }
@@ -176,8 +177,16 @@ export default function PricingSelection({ user, onPaymentVerified, onLogout, lo
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -15 }}
-            className="grid grid-cols-1 md:grid-cols-3 gap-6"
+            className="space-y-6"
           >
+            {error && (
+              <div className="p-4 bg-red-950/40 border border-red-900/50 rounded-xl flex items-center gap-2 text-xs text-red-200">
+                <AlertTriangle size={18} className="text-red-400 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {PLANS.map((plan) => (
               <div 
                 key={plan.id}
@@ -227,6 +236,7 @@ export default function PricingSelection({ user, onPaymentVerified, onLogout, lo
                 </button>
               </div>
             ))}
+            </div>
           </motion.div>
         ) : (
           <motion.div
