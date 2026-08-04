@@ -153,21 +153,31 @@ export default function AuthScreen({ onAuthSuccess, locale, t }: AuthScreenProps
       }
 
       if (data.success) {
-        setEmailForVerification(email);
-        if (data.verificationCode) {
-          setVerificationCode(data.verificationCode);
-        }
+        setSuccess(locale === "am" ? "ምዝገባው ተጠናቋል! ወደ መለያዎ በመግባት ላይ..." : "Registration successful! Logging you in...");
         
-        const successMessage = data.emailSent
-          ? (locale === "am" ? "ምዝገባው ተጠናቋል! የማረጋገጫ ኮድ ወደ ኢሜልዎ ተልኳል" : "Registration success! Verification code dispatched to your email.")
-          : (locale === "am" ? `ምዝገባው ተጠናቋል! የማረጋገጫ ኮድ: ${data.verificationCode || ""}` : `Account created! Verification code: ${data.verificationCode || ""}`);
-        
-        setSuccess(successMessage);
-        setTimeout(() => {
-          setShowCodeVerification(true);
-          setError(null);
-          setSuccess(null);
-        }, 1200);
+        // Auto-login user immediately without email verification code barrier
+        setTimeout(async () => {
+          try {
+            const loginRes = await fetch(getApiUrl("/api/auth/signin"), {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ email, password })
+            });
+            const loginData = await loginRes.json();
+            if (loginData.success && loginData.user) {
+              if (loginData.token) {
+                localStorage.setItem("BEU_AUTH_TOKEN", loginData.token);
+              }
+              onAuthSuccess(loginData.user);
+            } else {
+              setActiveTab("signin");
+              setEmail(email);
+            }
+          } catch (autoLoginErr) {
+            setActiveTab("signin");
+            setEmail(email);
+          }
+        }, 1000);
       } else {
         setError(data.message || "Failed to register.");
       }

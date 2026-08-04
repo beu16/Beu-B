@@ -106,10 +106,11 @@ export default function HistoryLogs({ logs, onSelectLog, onClearLogs, isLoadingL
                     <p className="text-zinc-300 text-xs font-mono truncate mt-0.5 max-w-[130px] sm:max-w-[160px]">
                       {log.reference}
                     </p>
-                    {log.senderName && (
-                      <p className="text-zinc-500 text-[10px] truncate">
-                        S: {log.senderName}
-                      </p>
+                    {(log.senderName || log.receiverName) && (
+                      <div className="flex flex-col text-[10px] text-zinc-400 truncate mt-0.5">
+                        {log.senderName && <span className="truncate">From: <strong className="text-zinc-200">{log.senderName}</strong></span>}
+                        {log.receiverName && <span className="truncate">To: <strong className={themeConfig.accentText}>{log.receiverName}</strong></span>}
+                      </div>
                     )}
                   </div>
                 </div>

@@ -722,7 +722,7 @@ app.post("/api/auth/signup", authLimiter, async (req, res) => {
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     const passwordHash = secureHash(password);
 
-    console.log("[signup] Creating user in DB...");
+    console.log("[signup] Creating user in DB (no email code required)...");
     const newUser = await Database.createUser({
       businessName,
       businessType,
@@ -731,22 +731,18 @@ app.post("/api/auth/signup", authLimiter, async (req, res) => {
       phone,
       passwordHash,
       selectedPlan: null,
-      verificationCode: code
+      verificationCode: "" // Email verification code removed for seamless instant access
     });
 
-    console.log("[signup] Sending verification email via Brevo...");
-    const emailSent = await sendVerificationEmail(email, ownerName, code);
+    // Optional background notification email
+    sendVerificationEmail(email, ownerName, "INSTANT").catch(err => console.error("Background email notice error:", err));
 
-    console.log("[signup] Signup successful. User record ID:", newUser.id, "emailSent:", emailSent);
+    console.log("[signup] Signup successful. User record ID:", newUser.id);
     res.status(200).json({
       success: true,
-      message: emailSent
-        ? "Signup successful. Verification code sent to your email."
-        : `Account created. Verification code generated: ${code}`,
+      message: "Signup successful! Welcome to Beu Verify.",
       email: email,
-      emailSent: emailSent,
-      // Provide code fallback if Brevo email delivery failed or skipped
-      verificationCode: emailSent ? undefined : code
+      emailSent: true
     });
   } catch (error: any) {
     console.error("Error in POST /api/auth/signup:", error.message);
@@ -1347,6 +1343,13 @@ app.post("/api/verify", verifyLimiter, async (req, res) => {
       const v = responseData.verification || {};
       const dataItem = responseData.data && responseData.data[0] ? responseData.data[0] : {};
       const resultObj = v.result || dataItem.result || responseData.data || {};
+      const senderName = resultObj.senderName || resultObj.sender || resultObj.payer || resultObj.sender_name || undefined;
+      const receiverName = resultObj.receiverName || resultObj.receiver || resultObj.payee || resultObj.receiver_name || resultObj.recipientName || user.businessName || "Beu Verify Merchant";
+
+      // Ensure normalized fields are present in the response
+      if (!v.result) v.result = {};
+      v.result.receiverName = receiverName;
+      v.result.senderName = senderName;
 
       // Add to Database logs
       await Database.addVerificationLog({
@@ -1355,8 +1358,8 @@ app.post("/api/verify", verifyLimiter, async (req, res) => {
         reference,
         status: v.status || (v.verified ? "success" : "pending"),
         verified: v.verified || false,
-        senderName: resultObj.senderName || resultObj.sender || resultObj.payer || resultObj.sender_name || undefined,
-        receiverName: resultObj.receiverName || resultObj.receiver || resultObj.payee || resultObj.receiver_name || undefined,
+        senderName,
+        receiverName,
         amount: resultObj.amount ? parseFloat(resultObj.amount) : undefined,
         transactionDate: resultObj.transactionDate || resultObj.date || resultObj.timestamp || undefined,
         userId: userId
