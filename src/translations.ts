@@ -318,3 +318,8 @@ export const TRANSLATIONS: Record<Locale, TranslationKeys> = {
     errorPhoneInvalid: "እባክዎ ትክክለኛ የኢትዮጵያ ስልክ ቁጥር ያስገቡ።"
   }
 };
+
+export function getTranslation(locale: Locale = 'en'): TranslationKeys {
+  return TRANSLATIONS[locale] || TRANSLATIONS.en;
+}
+

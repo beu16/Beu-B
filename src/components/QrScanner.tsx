@@ -25,7 +25,7 @@ const SUPPORTED_BANKS = [
   { id: "siinqee", name: "Siinqee Bank" }
 ];
 
-export default function QrScanner({ onScanSuccess, onScanError, themeConfig, t, initialTab = "upload" }: QrScannerProps) {
+function QrScanner({ onScanSuccess, onScanError, themeConfig, t, initialTab = "upload" }: QrScannerProps) {
   const [activeTab, setActiveTab] = useState<"upload" | "camera">(initialTab);
 
   useEffect(() => {
@@ -172,12 +172,12 @@ export default function QrScanner({ onScanSuccess, onScanError, themeConfig, t, 
     } catch (err: any) {
       console.error("Camera access error:", err);
       const errMsg = err?.message || err?.toString() || "";
-      if (errMsg.includes("AndroidManifest") || errMsg.includes("Barcode") || errMsg.includes("permission") || errMsg.includes("installGoogleBarcodeScannerModule")) {
-        setCameraError(errMsg);
+      if (errMsg.includes("AndroidManifest") || errMsg.includes("Barcode") || errMsg.includes("permission") || errMsg.includes("installGoogleBarcodeScannerModule") || errMsg.includes("READ_EXTERNAL_STORAGE")) {
+        setCameraError("Camera or Barcode module permission is restricted on this mobile build. Please use the 'Upload Image' tab or enter receipt reference manually below.");
       } else if (err?.name === "NotAllowedError" || err?.name === "PermissionDeniedError") {
-        setCameraError("Camera permission was denied. Please allow camera access in your browser site settings or click 'Retry Camera Stream'.");
+        setCameraError("Camera permission was denied. Please allow camera access in your browser or device app permissions, or click 'Use Image Upload'.");
       } else {
-        setCameraError(t.cameraAccessDenied || "Camera access was denied or is unavailable on this device. Please check site permissions or use 'Upload Image'.");
+        setCameraError(t.cameraAccessDenied || "Camera access is unavailable on this device environment. Please use 'Upload Image' tab or manual reference entry.");
       }
       setIsScanning(false);
     }
@@ -520,3 +520,6 @@ export default function QrScanner({ onScanSuccess, onScanError, themeConfig, t, 
     </div>
   );
 }
+
+export { QrScanner };
+export default QrScanner;

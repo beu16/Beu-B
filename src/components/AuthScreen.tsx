@@ -1,7 +1,7 @@
 import React, { useState } from "react";
-import { Mail, Lock, Building2, User as UserIcon, Phone, ShieldCheck, HelpCircle, ArrowRight, CheckCircle2, AlertCircle, Eye, EyeOff, KeyRound } from "lucide-react";
+import { Mail, Lock, Building2, User as UserIcon, Phone, ShieldCheck, HelpCircle, ArrowRight, CheckCircle2, AlertCircle, Eye, EyeOff, KeyRound, Server, RefreshCw } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { getApiUrl } from "../api";
+import { getApiUrl, getStoredServerUrl, setStoredServerUrl } from "../api";
 
 interface AuthScreenProps {
   onAuthSuccess: (user: any) => void;
@@ -59,6 +59,16 @@ export default function AuthScreen({ onAuthSuccess, locale, t }: AuthScreenProps
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [showServerModal, setShowServerModal] = useState(false);
+  const [serverUrlInput, setServerUrlInput] = useState(() => getStoredServerUrl() || "https://ais-pre-dydrdwywttbcz2jlgbntx2-283283379149.europe-west2.run.app");
+
+  const handleSaveServerUrl = (url: string) => {
+    setStoredServerUrl(url);
+    setServerUrlInput(url.trim());
+    setShowServerModal(false);
+    setError(null);
+    setSuccess(`Backend Server URL configured! Target: ${url || "Official Production Backend"}`);
+  };
 
   const clearForm = () => {
     setBusinessName("");
@@ -94,9 +104,14 @@ export default function AuthScreen({ onAuthSuccess, locale, t }: AuthScreenProps
 
       let data;
       try {
-        data = await response.json();
-      } catch (jsonErr) {
-        throw new Error(`Server returned HTTP ${response.status} (${response.statusText}) and invalid JSON response.`);
+        const responseText = await response.text();
+        try {
+          data = JSON.parse(responseText);
+        } catch (jsonErr) {
+          throw new Error(`Server returned non-JSON response (HTTP ${response.status}). Please verify your backend server URL.`);
+        }
+      } catch (readErr: any) {
+        throw new Error(readErr?.message || `Server returned HTTP ${response.status} with invalid JSON.`);
       }
 
       if (data.success) {
@@ -153,9 +168,14 @@ export default function AuthScreen({ onAuthSuccess, locale, t }: AuthScreenProps
 
       let data;
       try {
-        data = await response.json();
-      } catch (jsonErr) {
-        throw new Error(`Server returned HTTP ${response.status} (${response.statusText}) and invalid JSON response.`);
+        const responseText = await response.text();
+        try {
+          data = JSON.parse(responseText);
+        } catch (jsonErr) {
+          throw new Error(`Server returned non-JSON response (HTTP ${response.status}). Please verify your backend server URL.`);
+        }
+      } catch (readErr: any) {
+        throw new Error(readErr?.message || `Server returned HTTP ${response.status} with invalid JSON.`);
       }
 
       if (data.success) {
@@ -333,10 +353,23 @@ export default function AuthScreen({ onAuthSuccess, locale, t }: AuthScreenProps
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: "auto" }}
                   exit={{ opacity: 0, height: 0 }}
-                  className="p-3 mb-4 bg-red-950/40 border border-red-900/50 text-red-200 text-xs rounded-xl flex items-start gap-2.5 shadow-sm"
+                  className="p-3.5 mb-4 bg-red-950/50 border border-red-900/60 text-red-200 text-xs rounded-xl flex flex-col gap-2.5 shadow-sm"
                 >
-                  <AlertCircle size={16} className="text-red-400 shrink-0 mt-0.5" />
-                  <span>{error}</span>
+                  <div className="flex items-start gap-2.5">
+                    <AlertCircle size={16} className="text-red-400 shrink-0 mt-0.5" />
+                    <span className="leading-relaxed font-sans">{error}</span>
+                  </div>
+                  {(error.includes("Network error") || error.includes("non-JSON") || error.includes("host") || error.includes("Server") || error.includes("connect")) && (
+                    <div className="flex items-center gap-2 pt-2 border-t border-red-900/40">
+                      <button
+                        type="button"
+                        onClick={() => setShowServerModal(true)}
+                        className="px-3 py-1.5 bg-amber-400 text-black font-extrabold text-[11px] uppercase rounded-lg flex items-center gap-1.5 hover:bg-amber-300 transition-all cursor-pointer shadow-sm active:scale-95"
+                      >
+                        <Server size={12} /> {locale === "am" ? "የሰርቨር URL አስተካክል" : "Configure Backend Server URL"}
+                      </button>
+                    </div>
+                  )}
                 </motion.div>
               )}
               {success && (
@@ -705,6 +738,81 @@ export default function AuthScreen({ onAuthSuccess, locale, t }: AuthScreenProps
               {locale === "am" ? "ወደ ኋላ ይመለሱ" : "Go back to register details"}
             </button>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Backend Server URL Config Modal */}
+      <AnimatePresence>
+        {showServerModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-sm bg-[#121215] border border-amber-400/40 rounded-2xl p-5 shadow-2xl text-left"
+            >
+              <div className="flex items-center gap-2.5 mb-3">
+                <div className="p-2 bg-amber-400/10 rounded-xl text-amber-400">
+                  <Server size={20} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                    {locale === "am" ? "የሰርቨር አድራሻ (Server URL)" : "Backend Server URL"}
+                  </h3>
+                  <p className="text-[10px] text-zinc-400 font-mono">Configure API endpoint location</p>
+                </div>
+              </div>
+
+              <p className="text-xs text-zinc-300 mb-3 leading-relaxed">
+                If running on Android APK or custom host, set your server base URL (e.g., Vercel, Render, or backend domain):
+              </p>
+
+              <div className="space-y-3 mb-4">
+                <input
+                  type="url"
+                  value={serverUrlInput}
+                  onChange={(e) => setServerUrlInput(e.target.value)}
+                  placeholder="https://your-backend-server.com"
+                  className="w-full bg-zinc-900 border border-zinc-700 focus:border-amber-400 text-xs font-mono text-amber-300 rounded-xl px-3 py-2.5 focus:outline-none transition-colors"
+                />
+
+                <div className="flex flex-col gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setServerUrlInput("https://ais-pre-dydrdwywttbcz2jlgbntx2-283283379149.europe-west2.run.app")}
+                    className="w-full py-2 px-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[11px] font-bold rounded-lg transition-colors flex items-center justify-between text-left cursor-pointer"
+                  >
+                    <span>Use Official Cloud Backend</span>
+                    <RefreshCw size={12} className="text-amber-400" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setServerUrlInput("")}
+                    className="w-full py-1.5 px-3 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 text-[10px] font-mono rounded-lg transition-colors text-left cursor-pointer"
+                  >
+                    Reset to Default (Relative /api)
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowServerModal(false)}
+                  className="flex-1 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold text-xs uppercase rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSaveServerUrl(serverUrlInput)}
+                  className="flex-1 py-2.5 bg-amber-400 hover:bg-amber-300 text-black font-extrabold text-xs uppercase rounded-xl transition-colors cursor-pointer shadow-md"
+                >
+                  Save URL
+                </button>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>

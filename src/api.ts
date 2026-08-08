@@ -1,3 +1,27 @@
+export const getStoredServerUrl = (): string => {
+  if (typeof window !== "undefined") {
+    return localStorage.getItem("BEU_SERVER_URL") || "";
+  }
+  return "";
+};
+
+export const setStoredServerUrl = (url: string): void => {
+  if (typeof window !== "undefined") {
+    if (!url.trim()) {
+      localStorage.removeItem("BEU_SERVER_URL");
+    } else {
+      let clean = url.trim();
+      if (!clean.startsWith("http://") && !clean.startsWith("https://")) {
+        clean = `https://${clean}`;
+      }
+      if (clean.endsWith("/")) {
+        clean = clean.slice(0, -1);
+      }
+      localStorage.setItem("BEU_SERVER_URL", clean);
+    }
+  }
+};
+
 export const getApiUrl = (endpoint: string): string => {
   if (endpoint.startsWith("http://") || endpoint.startsWith("https://")) {
     return endpoint;
@@ -15,8 +39,8 @@ export const getApiUrl = (endpoint: string): string => {
   // 2. Check stored custom server URL in mobile settings
   if (typeof window !== "undefined") {
     const savedServer = localStorage.getItem("BEU_SERVER_URL");
-    if (savedServer) {
-      const base = savedServer.endsWith("/") ? savedServer.slice(0, -1) : savedServer;
+    if (savedServer && savedServer.trim()) {
+      const base = savedServer.trim().endsWith("/") ? savedServer.trim().slice(0, -1) : savedServer.trim();
       return `${base}${cleanEndpoint}`;
     }
 
@@ -25,8 +49,8 @@ export const getApiUrl = (endpoint: string): string => {
     const isMobileScheme = origin.startsWith("file:") || origin.startsWith("capacitor:") || origin.startsWith("ionic:") || origin.startsWith("content:") || (window.location.hostname === "localhost" && window.location.port !== "3000");
 
     if (isMobileScheme) {
-      // Connect to the Cloud Run hosted backend server URL
-      const defaultBackend = "https://ais-dev-dydrdwywttbcz2jlgbntx2-283283379149.europe-west2.run.app";
+      // Connect to the official production hosted backend server URL
+      const defaultBackend = "https://ais-pre-dydrdwywttbcz2jlgbntx2-283283379149.europe-west2.run.app";
       return `${defaultBackend}${cleanEndpoint}`;
     }
   }
