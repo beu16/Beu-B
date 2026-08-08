@@ -6,7 +6,8 @@ import { getApiUrl } from "../api";
 interface PricingSelectionProps {
   user: any;
   onPaymentVerified: () => void;
-  onLogout: () => void;
+  onLogout?: () => void;
+  onBack?: () => void;
   locale: "am" | "en";
   t: any;
 }
@@ -47,7 +48,7 @@ const PLANS = [
   }
 ];
 
-export default function PricingSelection({ user, onPaymentVerified, onLogout, locale, t }: PricingSelectionProps) {
+export default function PricingSelection({ user, onPaymentVerified, onLogout, onBack, locale, t }: PricingSelectionProps) {
   const [step, setStep] = useState<"pricing" | "payment">("pricing");
   const [selectedPlan, setSelectedPlan] = useState<typeof PLANS[0] | null>(null);
   
@@ -119,7 +120,8 @@ export default function PricingSelection({ user, onPaymentVerified, onLogout, lo
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
-          referenceNumber: referenceNumber.trim()
+          referenceNumber: referenceNumber.trim(),
+          plan: selectedPlan?.id || "business"
         })
       });
 
@@ -134,8 +136,8 @@ export default function PricingSelection({ user, onPaymentVerified, onLogout, lo
       }
     } catch (err) {
       setError(locale === "am" 
-        ? "የክፍያ ማረጋገጥ አልተቻለም። እባክዎ በቴሌግራም @Beutechsupport ያግኙን።" 
-        : "Payment Verification Failed! Please contact our support team on Telegram via @Beutechsupport and describe the problem you faced. We will help you resolve it quickly."
+        ? "የክፍያ ማረጋገጥ አልተቻለም። እባክዎ በቴሌግራም @beuverify ያግኙን።" 
+        : "Payment Verification Failed! Please contact our support team on Telegram via @beuverify and describe the problem you faced. We will help you resolve it quickly."
       );
     } finally {
       setIsLoading(false);
@@ -144,6 +146,31 @@ export default function PricingSelection({ user, onPaymentVerified, onLogout, lo
 
   return (
     <div className={`w-full mx-auto px-4 py-8 transition-all duration-500 ${step === "payment" ? "max-w-6xl" : "max-w-4xl"}`}>
+      {/* Top Header Navigation */}
+      <div className="flex items-center justify-between mb-6">
+        {onBack ? (
+          <button
+            type="button"
+            onClick={onBack}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white hover:border-zinc-700 text-xs font-semibold transition-all cursor-pointer"
+          >
+            <ArrowLeft size={14} />
+            <span>{locale === "am" ? "ወደ ዋናው ገጽ ተመለስ" : "Back to Workspace"}</span>
+          </button>
+        ) : <div />}
+
+        {step === "payment" && (
+          <button
+            type="button"
+            onClick={() => setStep("pricing")}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-400/10 border border-amber-400/30 text-amber-400 hover:bg-amber-400/20 text-xs font-bold transition-all cursor-pointer"
+          >
+            <RefreshCw size={14} />
+            <span>{locale === "am" ? "ሁሉንም ጥቅሎች ይመልከቱ" : "View All Subscription Plans"}</span>
+          </button>
+        )}
+      </div>
+
       {/* Top Title */}
       <div className="flex flex-col items-center text-center mb-10">
         <div className="flex items-center gap-2 mb-2">
@@ -363,16 +390,16 @@ export default function PricingSelection({ user, onPaymentVerified, onLogout, lo
                     <div className="flex items-start gap-2.5">
                       <AlertTriangle size={18} className="text-red-400 shrink-0 mt-0.5" />
                       <p className="text-xs text-red-200 leading-relaxed">
-                        {error.includes("@Beutechsupport") ? (
+                        {error.includes("@beuverify") || error.includes("@Beutechsupport") || error.includes("Telegram") ? (
                           <>
                             Payment Failed! Please contact our support team on Telegram via{" "}
                             <a 
-                              href="https://t.me/Beutechsupport" 
+                              href="https://t.me/beuverify" 
                               target="_blank" 
                               rel="noopener noreferrer" 
                               className="text-amber-400 font-black underline hover:text-amber-300 inline-flex items-center gap-0.5"
                             >
-                              @Beutechsupport <ExternalLink size={10} />
+                              @beuverify <ExternalLink size={10} />
                             </a>{" "}
                             and describe the problem you faced. We will help you resolve it quickly.
                           </>

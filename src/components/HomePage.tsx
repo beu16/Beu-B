@@ -958,7 +958,7 @@ export default function HomePage({ onGetStarted, onLoginClick, locale }: HomePag
                 },
                 {
                   q: "How fast does customer support respond?",
-                  a: "Our priority support channel via Telegram (@BeuVerifySupport) operates 24/7 with a typical response time under 15 minutes."
+                  a: "Our priority support channel via Telegram (@beuverify) operates 24/7 with a typical response time under 15 minutes."
                 }
               ]).map((item, idx) => {
                 const isOpen = activeFaq === idx;
@@ -1043,8 +1043,8 @@ export default function HomePage({ onGetStarted, onLoginClick, locale }: HomePag
                       <span className="text-[10px] font-mono text-zinc-500 uppercase font-black block">
                         {locale === "am" ? "ቴሌግራም ቻናል" : "TELEGRAM SUPPORT"}
                       </span>
-                      <a href="https://t.me/BeuVerifySupport" target="_blank" rel="noreferrer" className="text-amber-400 font-black hover:underline">
-                        @BeuVerifySupport
+                      <a href="https://t.me/beuverify" target="_blank" rel="noreferrer" className="text-amber-400 font-black hover:underline">
+                        @beuverify
                       </a>
                     </div>
                   </div>

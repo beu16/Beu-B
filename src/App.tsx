@@ -120,36 +120,47 @@ export default function App() {
   const [showSecurityPrompt, setShowSecurityPrompt] = useState(false);
 
   const fetchLogs = async () => {
-    if (!user || !user.id) return;
+    if (!user) return;
     setIsLoadingLogs(true);
-    const storageKey = `beu_verify_logs_${user.id}`;
+    const userIdKey = user.id || user.email || "guest";
+    const storageKey = `beu_verify_logs_${userIdKey}`;
     
-    // Read cached local device history
+    // Read cached local device history immediately
     const cachedLogsRaw = localStorage.getItem(storageKey);
     const cachedLogs: VerificationLog[] = cachedLogsRaw ? JSON.parse(cachedLogsRaw) : [];
+    if (cachedLogs.length > 0) {
+      setLogs(cachedLogs);
+    }
 
     try {
       // Fetch user-specific logs from API
-      const res = await fetch(getApiUrl(`/api/logs/${user.id}`));
-      const data = await res.json();
-      if (data.success && data.logs) {
-        // Merge server and local logs without duplicate requestId
-        const mergedMap = new Map<string, VerificationLog>();
-        [...data.logs, ...cachedLogs].forEach(item => {
-          if (item.requestId) {
-            mergedMap.set(item.requestId, item);
-          }
-        });
-        const finalLogs = Array.from(mergedMap.values()).sort(
-          (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-        );
-        setLogs(finalLogs);
-        localStorage.setItem(storageKey, JSON.stringify(finalLogs));
-      } else if (cachedLogs.length > 0) {
-        setLogs(cachedLogs);
+      const targetId = user.id || "all";
+      const res = await fetch(getApiUrl(`/api/logs/${targetId}`), {
+        headers: {
+          "Accept": "application/json"
+        }
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.success && Array.isArray(data.logs)) {
+          // Merge server and local logs without duplicate requestId
+          const mergedMap = new Map<string, VerificationLog>();
+          [...data.logs, ...cachedLogs].forEach(item => {
+            const key = item.requestId || item.reference || `${item.timestamp}_${item.amount}`;
+            if (key) {
+              mergedMap.set(key, item);
+            }
+          });
+          const finalLogs = Array.from(mergedMap.values()).sort(
+            (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+          );
+          setLogs(finalLogs);
+          localStorage.setItem(storageKey, JSON.stringify(finalLogs));
+        }
       }
     } catch (e) {
-      console.warn("API logs unreachable, relying on local device storage:", e);
+      // Silent local device fallback for offline mode
       if (cachedLogs.length > 0) {
         setLogs(cachedLogs);
       }
@@ -371,21 +382,37 @@ export default function App() {
         const v = responseData.verification || {};
         const dataItem = responseData.data && responseData.data[0] ? responseData.data[0] : {};
         const resultObj = v.result || dataItem.result || responseData.data || {};
+        const isVerified = v.verified || dataItem.verified || responseData.verified || false;
 
-        setCurrentVerification({
-          requestId: responseData.requestId || v.requestId || "verified",
-          bank: inputData.bank || dataItem.bank || "universal",
-          reference: inputData.reference,
-          suffix: inputData.suffix,
-          phoneNumber: inputData.phoneNumber,
-          processingStatus: ProcessingStatus.Completed,
-          status: VerificationStatus.Success,
-          verified: v.verified || dataItem.verified || false,
-          senderName: resultObj.senderName || resultObj.sender || resultObj.payer || resultObj.sender_name,
-          receiverName: resultObj.receiverName || resultObj.receiver || resultObj.payee || resultObj.receiver_name,
-          amount: resultObj.amount ? parseFloat(resultObj.amount) : undefined,
-          transactionDate: resultObj.transactionDate || resultObj.date || resultObj.timestamp,
-        });
+        if (isVerified) {
+          setCurrentVerification({
+            requestId: responseData.requestId || v.requestId || "verified",
+            bank: inputData.bank || dataItem.bank || "universal",
+            reference: inputData.reference,
+            suffix: inputData.suffix,
+            phoneNumber: inputData.phoneNumber,
+            processingStatus: ProcessingStatus.Completed,
+            status: VerificationStatus.Success,
+            verified: true,
+            senderName: resultObj.senderName || resultObj.sender || resultObj.payer || resultObj.sender_name,
+            receiverName: resultObj.receiverName || resultObj.receiver || resultObj.payee || resultObj.receiver_name,
+            amount: resultObj.amount ? parseFloat(resultObj.amount) : undefined,
+            transactionDate: resultObj.transactionDate || resultObj.date || resultObj.timestamp,
+          });
+        } else {
+          const errMsg = responseData.message || responseData.error?.message || v.errorMessage || v.error?.message || "Transaction was not found or could not be verified on the bank network.";
+          setCurrentVerification({
+            requestId: responseData.requestId || v.requestId || "failed",
+            bank: inputData.bank,
+            reference: inputData.reference,
+            suffix: inputData.suffix,
+            phoneNumber: inputData.phoneNumber,
+            processingStatus: ProcessingStatus.Failed,
+            status: VerificationStatus.Failed,
+            verified: false,
+            errorMessage: errMsg
+          });
+        }
         setIsLoading(false);
         fetchLogs();
         checkUserSession(); // Sync credits
@@ -403,6 +430,7 @@ export default function App() {
         });
         startPolling(requestId, inputData.bank, inputData.reference);
       } else {
+        const errMsg = responseData.message || responseData.error?.message || responseData.verification?.errorMessage || responseData.verification?.error?.message || "Verification request failed.";
         setCurrentVerification({
           requestId: responseData.requestId || "failed",
           bank: inputData.bank,
@@ -412,7 +440,7 @@ export default function App() {
           processingStatus: ProcessingStatus.Failed,
           status: VerificationStatus.Failed,
           verified: false,
-          errorMessage: responseData.message || responseData.error?.message || "Verification request failed."
+          errorMessage: errMsg
         });
         setIsLoading(false);
       }
@@ -577,48 +605,11 @@ export default function App() {
   }
 
   // ============================================
-  // RENDER LEVEL 4: Pricing/Package Selection Screen
+  // RENDER LEVEL 4: Pricing/Package Selection Screen (Unpaid Users Gate)
   // ============================================
-  const isPendingPay = user.status === "Pending Verification";
-  const hasNoPlanSelected = !user.selectedPlan;
+  const isNotActive = user.status !== "Active";
 
-  if (isPendingPay && hasNoPlanSelected && !user.isAdmin) {
-    return (
-      <div className="min-h-screen bg-black flex flex-col">
-        {/* Header toolbar */}
-        <header className="h-16 border-b border-zinc-900 flex items-center justify-between px-6 bg-zinc-950/80">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 bg-amber-400 rounded flex items-center justify-center text-black">
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                <path d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-            </div>
-            <span className="text-sm font-black text-white">Beu Verify</span>
-          </div>
-          <button onClick={handleLogout} className="text-xs text-zinc-500 hover:text-white flex items-center gap-1.5">
-            <LogOut size={13} />
-            {locale === "am" ? "ይውጡ" : "Log out"}
-          </button>
-        </header>
-
-        <main className="flex-1 overflow-y-auto">
-          <PricingSelection 
-            user={user} 
-            onPaymentVerified={checkUserSession} 
-            onLogout={handleLogout} 
-            locale={locale} 
-            t={t} 
-          />
-        </main>
-      </div>
-    );
-  }
-
-  // ============================================
-  // RENDER LEVEL 5: Payment Reference Verification (Waiting for Telebirr matching)
-  // ============================================
-  const hasPlanSelected = !!user.selectedPlan;
-  if (isPendingPay && hasPlanSelected && !user.isAdmin) {
+  if (isNotActive && !user.isAdmin) {
     return (
       <div className="min-h-screen bg-black flex flex-col">
         {/* Header toolbar */}
@@ -665,6 +656,7 @@ export default function App() {
         currentVerification={currentVerification}
         setCurrentVerification={setCurrentVerification}
         isLoadingVerification={isLoading}
+        checkUserSession={checkUserSession}
       />
 
       <BiometricPinLock

@@ -50,6 +50,7 @@ import QrScanner from "./QrScanner";
 import ManualForm from "./ManualForm";
 import ResultDisplay from "./ResultDisplay";
 import BiometricPinLock from "./BiometricPinLock";
+import PricingSelection from "./PricingSelection";
 import { sendReceiptEmailViaBrevo } from "../lib/brevo";
 
 interface AndroidAppViewProps {
@@ -62,6 +63,7 @@ interface AndroidAppViewProps {
   currentVerification: ActiveVerification | null;
   setCurrentVerification: (v: ActiveVerification | null) => void;
   isLoadingVerification?: boolean;
+  checkUserSession?: () => void;
 }
 
 export type AndroidTab = "home" | "history" | "scan" | "analytics" | "profile";
@@ -76,7 +78,8 @@ export default function AndroidAppView({
   onVerifyReference,
   currentVerification,
   setCurrentVerification,
-  isLoadingVerification = false
+  isLoadingVerification = false,
+  checkUserSession
 }: AndroidAppViewProps) {
   const t = TRANSLATIONS[locale] || TRANSLATIONS.en;
 
@@ -131,15 +134,38 @@ export default function AndroidAppView({
   const userName = user?.ownerName || user?.businessName || "abc";
   const userRole = user?.isAdmin ? "Admin Node" : `${activePlan} Node`;
 
-  // Pre-populated transactions if logs empty
-  const sampleTransactions = [
-    { id: "1", merchant: "SuperMart", time: "14:42", dateGroup: "Today", amount: 245.50, verified: true, ref: "#BVF8K9D2A1" },
-    { id: "2", merchant: "Coffee Shop", time: "11:08", dateGroup: "Today", amount: 80.00, verified: true, ref: "#BVF7X3E912" },
-    { id: "3", merchant: "Pharmacy", time: "09:21", dateGroup: "Today", amount: 150.00, verified: true, ref: "#BVF9A1C445" },
-    { id: "4", merchant: "Fuel Station", time: "18:47", dateGroup: "Yesterday", amount: 1200.00, verified: true, ref: "#BVF5M8P771" },
-    { id: "5", merchant: "Bakery", time: "16:30", dateGroup: "Yesterday", amount: 45.00, verified: true, ref: "#BVF2K4Q903" },
-    { id: "6", merchant: "Electronics Store", time: "13:12", dateGroup: "Yesterday", amount: 2350.00, verified: true, ref: "#BVF1N0L882" }
-  ];
+  // Dynamic Realtime Statistics computed directly from actual user logs
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+  const todayLogs = logs.filter(l => new Date(l.timestamp || Date.now()) >= todayStart);
+  const todayVolume = todayLogs.reduce((sum, item) => sum + (item.amount || 0), 0);
+  const receiptsTodayCount = todayLogs.length;
+
+  const weeklyLogs = logs.filter(l => new Date(l.timestamp || Date.now()) >= sevenDaysAgo);
+  const weeklyVolume = weeklyLogs.reduce((sum, item) => sum + (item.amount || 0), 0);
+  const weeklyCount = weeklyLogs.length;
+
+  const totalSavedCount = logs.length;
+  const myEarnings = logs.reduce((sum, item) => sum + (item.amount || 0), 0);
+
+  // Group real logs by merchant / receiver name
+  const merchantMap = logs.reduce((acc: Record<string, { name: string; count: number; totalAmount: number }>, log) => {
+    const name = log.receiverName || log.bank?.toUpperCase() || "Merchant";
+    if (!acc[name]) {
+      acc[name] = { name, count: 0, totalAmount: 0 };
+    }
+    acc[name].count += 1;
+    acc[name].totalAmount += log.amount || 0;
+    return acc;
+  }, {});
+
+  const topMerchants = Object.values(merchantMap)
+    .sort((a, b) => b.totalAmount - a.totalAmount)
+    .slice(0, 5);
 
   // Helper triggers for scan modes
   const [scanTabMode, setScanTabMode] = useState<"camera" | "upload" | "manual">("camera");
@@ -445,136 +471,25 @@ export default function AndroidAppView({
             </motion.div>
           )}
           
-          {/* A. CREDITS / TOP UP SUBSCRIPTION SCREEN (Telebirr Only) */}
+          {/* A. TOTAL SUBSCRIPTION PAGE / TOP UP SCREEN */}
           {subScreen === "topup" && (
             <motion.div 
               initial={{ opacity: 0, x: 50 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 50 }}
-              className="absolute inset-0 bg-[#070709] z-30 p-4 space-y-4 overflow-y-auto"
+              className="absolute inset-0 bg-[#070709] z-30 overflow-y-auto"
             >
-              <div className="flex items-center justify-between pb-2 border-b border-zinc-900">
-                <button 
-                  onClick={() => setSubScreen("none")} 
-                  className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white font-bold"
-                >
-                  <ArrowLeft size={16} />
-                  <span>Subscription & Upgrade Package</span>
-                </button>
-                <span className="bg-amber-400/10 border border-amber-400/40 text-amber-300 px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase">
-                  Current: {activePlan} Tier
-                </span>
-              </div>
-
-              {/* Current Balance & Active Plan Card */}
-              <div className="p-4 bg-zinc-900/80 border border-amber-400/30 rounded-2xl flex items-center justify-between shadow-lg">
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-zinc-400 font-medium">Active Subscription Plan</span>
-                    <span className="px-1.5 py-0.2 bg-amber-400 text-black font-extrabold text-[9px] rounded font-mono uppercase">
-                      {activePlan}
-                    </span>
-                  </div>
-                  <p className="text-2xl font-black text-white font-mono mt-0.5">
-                    {userCredits} <span className="text-sm font-normal text-amber-400">Credits Available</span>
-                  </p>
-                </div>
-                <div className="w-12 h-12 bg-amber-400/10 border border-amber-400/30 rounded-2xl flex items-center justify-center text-amber-400">
-                  <Coins size={24} />
-                </div>
-              </div>
-
-              {/* Package Select Grid */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider">Select Credit Upgrade Package</label>
-                  <span className="text-[10px] text-amber-400 font-bold font-mono">Instant Activation</span>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {[
-                    { credits: 20, etb: 200, plan: "Starter" },
-                    { credits: 50, etb: 500, plan: "Pro" },
-                    { credits: 100, etb: 1000, plan: "Business" },
-                    { credits: 250, etb: 2000, plan: "Enterprise" },
-                  ].map((item) => (
-                    <button
-                      key={item.plan}
-                      onClick={() => setSelectedPackage(item)}
-                      className={`p-3 rounded-xl border flex flex-col items-center justify-center transition-all cursor-pointer ${
-                        selectedPackage.plan === item.plan
-                          ? "bg-amber-400 text-black border-amber-400 font-extrabold shadow-lg scale-[1.02]"
-                          : "bg-zinc-900/90 text-zinc-300 border-zinc-800 hover:border-zinc-700"
-                      }`}
-                    >
-                      <span className={`text-[10px] uppercase font-bold font-mono ${selectedPackage.plan === item.plan ? "text-black" : "text-amber-400"}`}>
-                        {item.plan}
-                      </span>
-                      <span className="text-lg font-black font-mono mt-0.5">+{item.credits} Cr</span>
-                      <span className={`text-[10px] font-mono opacity-80 ${selectedPackage.plan === item.plan ? "text-black" : "text-zinc-400"}`}>
-                        ETB {item.etb}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Package Upgrade Summary Banner */}
-              <div className="p-3 bg-amber-400/10 border border-amber-400/30 rounded-xl flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <p className="text-[10px] text-zinc-400 font-mono uppercase">Target Upgrade Package</p>
-                  <p className="text-xs font-black text-amber-300 flex items-center gap-1 font-display">
-                    <Zap size={13} className="fill-amber-300" />
-                    <span>Upgrading to {selectedPackage.plan} Package (+{selectedPackage.credits} Credits)</span>
-                  </p>
-                </div>
-                <div className="text-right">
-                  <span className="text-xs font-black text-white font-mono">ETB {selectedPackage.etb}</span>
-                </div>
-              </div>
-
-              {/* Payment Method - Telebirr Merchant */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider">Payment Method (Telebirr)</label>
-                <div className="p-3.5 bg-[#121216] border border-amber-400/40 rounded-xl flex items-center gap-3 text-xs font-bold text-amber-300">
-                  <Smartphone size={20} className="text-amber-400" />
-                  <div>
-                    <p className="font-extrabold text-white text-xs">Telebirr Merchant Instant Upgrade</p>
-                    <p className="text-[10px] text-zinc-400 font-normal">Pay ETB {selectedPackage.etb} via Telebirr merchant code & input reference below</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Telebirr Reference Input */}
-              <div className="space-y-1.5 p-3.5 bg-zinc-900/90 border border-zinc-800 rounded-xl">
-                <label className="block text-[10px] font-bold text-zinc-300 uppercase tracking-wider">
-                  Telebirr Transaction Reference No.
-                </label>
-                <input
-                  type="text"
-                  value={telebirrRefInput}
-                  onChange={(e) => setTelebirrRefInput(e.target.value.toUpperCase())}
-                  placeholder="e.g., TLB9845210"
-                  className="w-full bg-[#121214] border border-zinc-800 focus:border-amber-400 px-3 py-2 rounded-lg text-xs font-mono text-white placeholder-zinc-600 outline-none"
-                />
-              </div>
-
-              {/* Primary Action Button */}
-              <button 
-                onClick={() => {
-                  if (!telebirrRefInput.trim()) {
-                    alert("Please enter your Telebirr payment transaction reference number.");
-                    return;
-                  }
-                  setUserCredits(c => c + selectedPackage.credits);
-                  setActivePlan(selectedPackage.plan);
-                  alert(`✓ Upgraded to ${selectedPackage.plan} Package successfully! ${selectedPackage.credits} credits added to your account.`);
-                  setTelebirrRefInput("");
+              <PricingSelection
+                user={user}
+                onPaymentVerified={() => {
+                  if (checkUserSession) checkUserSession();
                   setSubScreen("none");
                 }}
-                className="w-full py-3.5 bg-amber-400 hover:bg-amber-300 text-black font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-[0_0_20px_rgba(250,204,21,0.3)] transition-all cursor-pointer"
-              >
-                Upgrade to {selectedPackage.plan} Package (+{selectedPackage.credits} Credits)
-              </button>
+                onBack={() => setSubScreen("none")}
+                onLogout={onLogout}
+                locale={locale}
+                t={t}
+              />
             </motion.div>
           )}
 
@@ -962,13 +877,13 @@ export default function AndroidAppView({
                   </p>
                   <div className="flex items-baseline gap-1.5">
                     <h2 className="text-2xl font-black text-white font-mono tracking-tight">
-                      {logs.reduce((sum, item) => sum + (item.amount || 0), 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {todayVolume.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </h2>
                     <span className="text-xs font-bold text-amber-400 font-mono">ETB</span>
                   </div>
                   <p className="text-[9px] text-emerald-400 flex items-center gap-1 font-medium">
                     <CheckCircle2 size={11} />
-                    <span>{logs.length} Total Verified</span>
+                    <span>{receiptsTodayCount} Verified Today ({totalSavedCount} Saved Total)</span>
                   </p>
                 </div>
 
@@ -1025,7 +940,7 @@ export default function AndroidAppView({
                 </div>
                 <div>
                   <p className="text-[10px] text-zinc-400 font-medium">Receipts Today</p>
-                  <p className="text-lg font-black text-white font-mono leading-tight mt-0.5">0</p>
+                  <p className="text-lg font-black text-white font-mono leading-tight mt-0.5">{receiptsTodayCount}</p>
                   <p className="text-[8px] text-zinc-500 font-mono">verified today</p>
                 </div>
               </div>
@@ -1040,9 +955,9 @@ export default function AndroidAppView({
                 <div>
                   <p className="text-[10px] text-zinc-400 font-medium">Weekly Volume</p>
                   <p className="text-lg font-black text-white font-mono leading-tight mt-0.5">
-                    983 <span className="text-[10px] text-zinc-400 font-normal">ETB</span>
+                    {weeklyVolume.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} <span className="text-[10px] text-zinc-400 font-normal">ETB</span>
                   </p>
-                  <p className="text-[8px] text-zinc-500 font-mono">13 receipts this week</p>
+                  <p className="text-[8px] text-zinc-500 font-mono">{weeklyCount} {weeklyCount === 1 ? "receipt" : "receipts"} this week</p>
                 </div>
               </div>
 
@@ -1055,7 +970,7 @@ export default function AndroidAppView({
                 </div>
                 <div>
                   <p className="text-[10px] text-zinc-400 font-medium">Transactions</p>
-                  <p className="text-lg font-black text-white font-mono leading-tight mt-0.5">13</p>
+                  <p className="text-lg font-black text-white font-mono leading-tight mt-0.5">{totalSavedCount}</p>
                   <p className="text-[8px] text-zinc-500 font-mono">total saved</p>
                 </div>
               </div>
@@ -1351,33 +1266,32 @@ export default function AndroidAppView({
             {/* Top Merchants Section */}
             <div className="space-y-2 text-xs">
               <h4 className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Top Merchants</h4>
-              <div className="space-y-2">
-                <div className="p-3 bg-zinc-900/80 border border-zinc-800 rounded-xl flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 bg-zinc-800 rounded-lg flex items-center justify-center text-amber-400 font-bold">
-                      <Building2 size={16} />
-                    </div>
-                    <div>
-                      <p className="font-bold text-white">SuperMart</p>
-                      <p className="text-[10px] text-zinc-400">3 receipts</p>
-                    </div>
-                  </div>
-                  <span className="font-bold text-white font-mono">ETB 465.50</span>
+              {topMerchants.length === 0 ? (
+                <div className="p-4 bg-zinc-900/60 border border-zinc-800 rounded-xl text-center space-y-1">
+                  <Building2 size={20} className="mx-auto text-zinc-600 mb-1" />
+                  <p className="text-[11px] text-zinc-400 font-bold">No Merchants Recorded Yet</p>
+                  <p className="text-[10px] text-zinc-500 max-w-xs mx-auto">
+                    Verified receipts will automatically group and display top merchant statistics here.
+                  </p>
                 </div>
-
-                <div className="p-3 bg-zinc-900/80 border border-zinc-800 rounded-xl flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 bg-zinc-800 rounded-lg flex items-center justify-center text-amber-400 font-bold">
-                      <Building2 size={16} />
+              ) : (
+                <div className="space-y-2">
+                  {topMerchants.map((m, idx) => (
+                    <div key={m.name + idx} className="p-3 bg-zinc-900/80 border border-zinc-800 rounded-xl flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 bg-zinc-800 rounded-lg flex items-center justify-center text-amber-400 font-bold">
+                          <Building2 size={16} />
+                        </div>
+                        <div>
+                          <p className="font-bold text-white">{m.name}</p>
+                          <p className="text-[10px] text-zinc-400">{m.count} {m.count === 1 ? "receipt" : "receipts"}</p>
+                        </div>
+                      </div>
+                      <span className="font-bold text-white font-mono">ETB {m.totalAmount.toFixed(2)}</span>
                     </div>
-                    <div>
-                      <p className="font-bold text-white">Fuel Station</p>
-                      <p className="text-[10px] text-zinc-400">2 receipts</p>
-                    </div>
-                  </div>
-                  <span className="font-bold text-white font-mono">ETB 1,200.00</span>
+                  ))}
                 </div>
-              </div>
+              )}
             </div>
 
           </div>
@@ -1444,7 +1358,7 @@ export default function AndroidAppView({
                     <CreditCard size={16} className="text-amber-400" />
                     <span>My Earnings</span>
                   </div>
-                  <span className="text-amber-400 font-bold font-mono">ETB 1,250.00 &gt;</span>
+                  <span className="text-amber-400 font-bold font-mono">ETB {myEarnings.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} &gt;</span>
                 </div>
 
                 <div className="p-3.5 flex items-center justify-between cursor-pointer hover:bg-zinc-800/40">
@@ -1602,7 +1516,7 @@ export default function AndroidAppView({
                   </button>
 
                   <button 
-                    onClick={() => { alert("BeuVerify Support: Contact @beuverifysupport on Telegram"); setShowDrawer(false); }}
+                    onClick={() => { alert("BeuVerify Support: Contact @beuverify on Telegram"); setShowDrawer(false); }}
                     className="w-full p-2.5 rounded-xl hover:bg-zinc-800/60 flex items-center gap-3 transition-colors"
                   >
                     <HelpCircle size={16} className="text-zinc-400" />

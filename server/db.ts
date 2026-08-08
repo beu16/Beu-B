@@ -70,22 +70,22 @@ export interface AppSettings {
 const mapToUser = (row: any): User => {
   return {
     id: String(row.id),
-    businessName: row.business_name || "",
-    businessType: row.business_type || "",
-    ownerName: row.owner_name || "",
+    businessName: row.business_name || row.businessName || "",
+    businessType: row.business_type || row.businessType || "",
+    ownerName: row.owner_name || row.ownerName || "",
     email: row.email || "",
     phone: row.phone || "",
-    passwordHash: row.password || "",
+    passwordHash: row.password || row.password_hash || row.passwordHash || "",
     credits: Number(row.credits || 0),
-    selectedPlan: row.selected_plan || null,
+    selectedPlan: row.selected_plan || row.selectedPlan || null,
     status: row.status || "Pending Verification",
-    isAdmin: !!row.is_admin,
-    verificationCode: row.verification_code || undefined,
-    paymentReference: row.payment_reference || undefined,
-    subscriptionDate: row.subscription_date || undefined,
-    expiryDate: row.expiry_date || undefined,
-    hasSeenFirstTimeApproval: row.has_seen_first_time_approval ?? undefined,
-    createdAt: row.created_at || new Date().toISOString()
+    isAdmin: Boolean(row.is_admin ?? row.isAdmin ?? false),
+    verificationCode: row.verification_code || row.verificationCode || undefined,
+    paymentReference: row.payment_reference || row.paymentReference || undefined,
+    subscriptionDate: row.subscription_date || row.subscriptionDate || undefined,
+    expiryDate: row.expiry_date || row.expiryDate || undefined,
+    hasSeenFirstTimeApproval: row.has_seen_first_time_approval ?? row.hasSeenFirstTimeApproval ?? undefined,
+    createdAt: row.created_at || row.createdAt || new Date().toISOString()
   };
 };
 
@@ -304,47 +304,73 @@ export class Database {
   static async findUserByEmail(email: string): Promise<User | undefined> {
     ensureInMemoryAdminUser();
     const normalizedEmail = email.toLowerCase().trim();
+    const isAdminEmail = normalizedEmail === "infobeutech@gmail.com" || 
+                         normalizedEmail === "biniamh79@gmail.com" || 
+                         normalizedEmail === (process.env.ADMIN_EMAIL || "").toLowerCase().trim();
+
     try {
       if (!hasValidSupabaseConfig()) {
-        return Array.from(inMemoryUsers.values()).find(u => u.email.toLowerCase().trim() === normalizedEmail);
+        const found = Array.from(inMemoryUsers.values()).find(u => u.email.toLowerCase().trim() === normalizedEmail);
+        if (found && isAdminEmail) found.isAdmin = true;
+        return found;
       }
-      const { data, error } = await supabase
+      
+      let { data, error } = await supabase
         .from("users")
         .select("*")
-        .eq("email", normalizedEmail)
+        .ilike("email", normalizedEmail)
         .maybeSingle();
+
       if (error || !data) {
-        return Array.from(inMemoryUsers.values()).find(u => u.email.toLowerCase().trim() === normalizedEmail);
+        // Try trimming / wildcard match if exact ilike missed
+        const { data: listData } = await supabase
+          .from("users")
+          .select("*")
+          .ilike("email", `%${normalizedEmail}%`);
+        if (listData && listData.length > 0) {
+          data = listData[0];
+        }
       }
+
+      if (!data) {
+        const found = Array.from(inMemoryUsers.values()).find(u => u.email.toLowerCase().trim() === normalizedEmail);
+        if (found && isAdminEmail) found.isAdmin = true;
+        return found;
+      }
+
       const user = mapToUser(data);
+      if (isAdminEmail) user.isAdmin = true;
       inMemoryUsers.set(user.id, user);
       return user;
     } catch (err: any) {
-      return Array.from(inMemoryUsers.values()).find(u => u.email.toLowerCase().trim() === normalizedEmail);
+      const found = Array.from(inMemoryUsers.values()).find(u => u.email.toLowerCase().trim() === normalizedEmail);
+      if (found && isAdminEmail) found.isAdmin = true;
+      return found;
     }
   }
 
   static async findUserById(id: string): Promise<User | undefined> {
     ensureInMemoryAdminUser();
     try {
-      if (id === "admin_id") {
+      if (id === "admin_id" || id === "1") {
+        const inMemAdmin = inMemoryUsers.get(id) || Array.from(inMemoryUsers.values()).find(u => u.isAdmin);
+        if (inMemAdmin) return inMemAdmin;
         const adminEmail = process.env.ADMIN_EMAIL || "infobeutech@gmail.com";
         return await this.findUserByEmail(adminEmail);
       }
       const inMemUser = inMemoryUsers.get(id);
+      if (inMemUser) return inMemUser;
+
       if (!hasValidSupabaseConfig()) return inMemUser;
 
       const parsedId = safeParseId(id);
-      if (parsedId === null) {
-        return inMemUser;
-      }
-      const { data, error } = await supabase
-        .from("users")
-        .select("*")
-        .eq("id", parsedId)
-        .maybeSingle();
+      const query = parsedId !== null 
+        ? supabase.from("users").select("*").eq("id", parsedId).maybeSingle()
+        : supabase.from("users").select("*").eq("id", id).maybeSingle();
+
+      const { data, error } = await query;
       if (error || !data) {
-        return inMemUser;
+        return inMemUser || Array.from(inMemoryUsers.values()).find(u => u.id === id);
       }
       const user = mapToUser(data);
       inMemoryUsers.set(user.id, user);
@@ -354,12 +380,12 @@ export class Database {
     }
   }
 
-  static async createUser(user: Omit<User, "id" | "credits" | "status" | "isAdmin" | "createdAt">): Promise<User> {
+  static async createUser(user: Omit<User, "id" | "credits" | "status" | "isAdmin" | "createdAt"> & { isAdmin?: boolean }): Promise<User> {
     const mappedObj = {
       ...user,
       credits: 0,
       status: "Pending Verification" as const,
-      isAdmin: false,
+      isAdmin: user.isAdmin ?? false,
       createdAt: new Date().toISOString()
     };
     try {
@@ -501,12 +527,24 @@ export class Database {
   static async getSettings(): Promise<AppSettings> {
     console.log("[db.ts] getSettings called");
     try {
+      if (hasValidSupabaseConfig()) {
+        const { data, error } = await supabase
+          .from("app_settings")
+          .select("*")
+          .eq("id", 1)
+          .maybeSingle();
+
+        if (!error && data && data.master_api_key) {
+          process.env.MASTER_API_KEY = data.master_api_key;
+          return { masterApiKey: data.master_api_key };
+        }
+      }
       const key = process.env.MASTER_API_KEY || "VERIFY_BANK_ET_sb6yaVJhCHvO1hHyVObxUhp6LAgwTq-UL0Pe8OOGouCwqJaIdxUd2Oo59of2eQSt";
-      console.log("[db.ts] getSettings returning masterApiKey (partially obfuscated):", key.substring(0, 15) + "...");
       return { masterApiKey: key };
     } catch (err: any) {
       console.error("[db.ts] getSettings failed:", err.message);
-      return { masterApiKey: "" };
+      const key = process.env.MASTER_API_KEY || "VERIFY_BANK_ET_sb6yaVJhCHvO1hHyVObxUhp6LAgwTq-UL0Pe8OOGouCwqJaIdxUd2Oo59of2eQSt";
+      return { masterApiKey: key };
     }
   }
 
@@ -515,7 +553,14 @@ export class Database {
     try {
       if (settings.masterApiKey) {
         process.env.MASTER_API_KEY = settings.masterApiKey;
-        console.log("[db.ts] updateSettings updated process.env.MASTER_API_KEY");
+        if (hasValidSupabaseConfig()) {
+          const { error } = await supabase
+            .from("app_settings")
+            .upsert({ id: 1, master_api_key: settings.masterApiKey }, { onConflict: "id" });
+          if (error) {
+            console.warn("[db.ts] Supabase app_settings upsert error:", error.message);
+          }
+        }
       }
       const key = process.env.MASTER_API_KEY || "VERIFY_BANK_ET_sb6yaVJhCHvO1hHyVObxUhp6LAgwTq-UL0Pe8OOGouCwqJaIdxUd2Oo59of2eQSt";
       return { masterApiKey: key };

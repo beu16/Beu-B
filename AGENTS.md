@@ -75,7 +75,7 @@ CREATE TABLE public.app_settings (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 2. Drop legacy policies if they exist (prevents conflicts)
+-- 2. Drop legacy policies if they exist (prevents conflicts and security warnings)
 DROP POLICY IF EXISTS "Allow public insert on users" ON public.users;
 DROP POLICY IF EXISTS "Allow public update on users" ON public.users;
 DROP POLICY IF EXISTS "Allow public access on logs" ON public.verification_logs;
@@ -90,6 +90,8 @@ DROP POLICY IF EXISTS "Refs select policy" ON public.transaction_references;
 DROP POLICY IF EXISTS "Refs insert policy" ON public.transaction_references;
 DROP POLICY IF EXISTS "Refs update policy" ON public.transaction_references;
 DROP POLICY IF EXISTS "Settings select policy" ON public.app_settings;
+DROP POLICY IF EXISTS "Settings insert policy" ON public.app_settings;
+DROP POLICY IF EXISTS "Settings update policy" ON public.app_settings;
 
 -- 3. Enable Row Level Security (RLS)
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
@@ -105,7 +107,7 @@ CREATE POLICY "Users insert policy" ON public.users
   FOR INSERT WITH CHECK (email IS NOT NULL AND length(email) > 3);
 
 CREATE POLICY "Users update policy" ON public.users
-  FOR UPDATE USING (id::text = auth.uid()::text) WITH CHECK (id::text = auth.uid()::text);
+  FOR UPDATE USING (email = current_setting('request.jwt.claim.email', true)) WITH CHECK (email = current_setting('request.jwt.claim.email', true));
 
 -- 5. Secure Policies for public.verification_logs
 CREATE POLICY "Logs select policy" ON public.verification_logs
@@ -114,9 +116,6 @@ CREATE POLICY "Logs select policy" ON public.verification_logs
 CREATE POLICY "Logs insert policy" ON public.verification_logs
   FOR INSERT WITH CHECK (transaction_id IS NOT NULL);
 
-CREATE POLICY "Logs update policy" ON public.verification_logs
-  FOR UPDATE USING (transaction_id IS NOT NULL) WITH CHECK (transaction_id IS NOT NULL);
-
 -- 6. Secure Policies for public.transaction_references
 CREATE POLICY "Refs select policy" ON public.transaction_references
   FOR SELECT USING (true);
@@ -124,10 +123,7 @@ CREATE POLICY "Refs select policy" ON public.transaction_references
 CREATE POLICY "Refs insert policy" ON public.transaction_references
   FOR INSERT WITH CHECK (reference_number IS NOT NULL);
 
-CREATE POLICY "Refs update policy" ON public.transaction_references
-  FOR UPDATE USING (status IS NOT NULL) WITH CHECK (status IS NOT NULL);
-
--- 7. Secure Policies for public.app_settings
+-- 7. Secure Policies for public.app_settings (ReadOnly for Client Anon, Backend uses Service Role Key)
 CREATE POLICY "Settings select policy" ON public.app_settings
   FOR SELECT USING (true);
 ```

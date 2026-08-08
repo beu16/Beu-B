@@ -19,12 +19,13 @@ interface ManualFormProps {
 const SUPPORTED_BANKS = [
   { id: "universal", name: "Universal Smart Router (Auto Detect)", placeholder: "CBE Receipt URL, SMS text, or Reference Code" },
   { id: "cbe", name: "Commercial Bank of Ethiopia (CBE)", placeholder: "Receipt Number, Receipt Link or Reference" },
-  { id: "boa", name: "Bank of Abyssinia (BOA)", placeholder: "Reference Number or Transaction ID" },
   { id: "telebirr", name: "Telebirr (Ethio Telecom)", placeholder: "10-character alphanumeric Transaction Number" },
-  { id: "mpesa", name: "M-Pesa (Safaricom)", placeholder: "Transaction/Reference Number (or SMS text)" },
-  { id: "dashen", name: "Dashen Bank", placeholder: "Reference Number" },
-  { id: "cbebirr", name: "CBE Birr", placeholder: "Receipt Number or Reference" },
+  { id: "boa", name: "Bank of Abyssinia (BOA)", placeholder: "Reference Number or Transaction ID" },
+  { id: "dashen", name: "Dashen Bank (Amole)", placeholder: "Reference Number" },
   { id: "awash", name: "Awash Bank", placeholder: "Reference Number or Receipt Link" },
+  { id: "coop", name: "Cooperative Bank of Oromia (Coop)", placeholder: "Coop Digital Slip / Reference Number" },
+  { id: "cbebirr", name: "CBE Birr", placeholder: "Receipt Number or Reference" },
+  { id: "mpesa", name: "M-Pesa (Safaricom)", placeholder: "Transaction/Reference Number (or SMS text)" },
   { id: "siinqee", name: "Siinqee Bank", placeholder: "Reference Number or Receipt Link" }
 ];
 

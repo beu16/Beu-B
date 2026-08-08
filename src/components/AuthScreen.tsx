@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Mail, Lock, Building2, User as UserIcon, Phone, ShieldCheck, HelpCircle, ArrowRight, CheckCircle2, AlertCircle, Eye, EyeOff } from "lucide-react";
+import { Mail, Lock, Building2, User as UserIcon, Phone, ShieldCheck, HelpCircle, ArrowRight, CheckCircle2, AlertCircle, Eye, EyeOff, KeyRound } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { getApiUrl } from "../api";
 
@@ -46,6 +46,8 @@ export default function AuthScreen({ onAuthSuccess, locale, t }: AuthScreenProps
   const [customBusinessType, setCustomBusinessType] = useState("");
   const [ownerName, setOwnerName] = useState("");
   const [email, setEmail] = useState("");
+  const [appUnlockPin, setAppUnlockPin] = useState("1234");
+  const [showAppUnlockPin, setShowAppUnlockPin] = useState(false);
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -129,6 +131,10 @@ export default function AuthScreen({ onAuthSuccess, locale, t }: AuthScreenProps
     setError(null);
     setSuccess(null);
 
+    // Save user's chosen 4-digit App Unlock PIN directly to local device security storage
+    const targetPin = appUnlockPin.trim().length === 4 ? appUnlockPin.trim() : "1234";
+    localStorage.setItem("beu_verify_security_pin", targetPin);
+
     const typeValue = businessType === "Other" ? customBusinessType : businessType;
 
     try {
@@ -153,9 +159,8 @@ export default function AuthScreen({ onAuthSuccess, locale, t }: AuthScreenProps
       }
 
       if (data.success) {
-        setSuccess(locale === "am" ? "ምዝገባው ተጠናቋል! ወደ መለያዎ በመግባት ላይ..." : "Registration successful! Logging you in...");
-        
-        // Auto-login user immediately without email verification code barrier
+        setSuccess(locale === "am" ? "ምዝገባው ተጠናቋል! ወደ ጥቅል መምረጫ ገጽ በመሄድ ላይ..." : "Registration successful! Loading subscription plans...");
+        // Auto sign in user immediately so they land directly on the Total Subscription Page
         setTimeout(async () => {
           try {
             const loginRes = await fetch(getApiUrl("/api/auth/signin"), {
@@ -171,11 +176,9 @@ export default function AuthScreen({ onAuthSuccess, locale, t }: AuthScreenProps
               onAuthSuccess(loginData.user);
             } else {
               setActiveTab("signin");
-              setEmail(email);
             }
           } catch (autoLoginErr) {
             setActiveTab("signin");
-            setEmail(email);
           }
         }, 1000);
       } else {
@@ -191,8 +194,8 @@ export default function AuthScreen({ onAuthSuccess, locale, t }: AuthScreenProps
 
   const handleVerifyCode = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!verificationCode || verificationCode.length !== 6) {
-      setError(locale === "am" ? "እባክዎ 6 ዲጂት የማረጋገጫ ኮድ ያስገቡ" : "Please enter the 6-digit code.");
+    if (!verificationCode || verificationCode.length < 4) {
+      setError(locale === "am" ? "እባክዎ ባለ 4-ዲጂት የማረጋገጫ ኮድ ያስገቡ" : "Please enter the 4-digit verification code.");
       return;
     }
 
@@ -205,8 +208,8 @@ export default function AuthScreen({ onAuthSuccess, locale, t }: AuthScreenProps
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: emailForVerification,
-          code: verificationCode
+          email: emailForVerification || email,
+          code: verificationCode.trim()
         })
       });
 
@@ -218,16 +221,31 @@ export default function AuthScreen({ onAuthSuccess, locale, t }: AuthScreenProps
       }
 
       if (data.success) {
-        setSuccess(locale === "am" ? "ኢሜልዎ በተሳካ ሁኔታ ተረጋግጧል! አሁን መግባት ይችላሉ።" : "Email verified! You can now sign in.");
-        setTimeout(() => {
-          // Reset view to signin tab
-          setShowCodeVerification(false);
-          setActiveTab("signin");
-          clearForm();
-          setEmail(emailForVerification);
-        }, 1500);
+        setSuccess(locale === "am" ? "ኢሜልዎ በተሳካ ሁኔታ ተረጋግጧል! ወደ ጥቅል መምረጫ በመሄድ ላይ..." : "Email verified! Launching subscription plans...");
+        setTimeout(async () => {
+          try {
+            const loginRes = await fetch(getApiUrl("/api/auth/signin"), {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ email: emailForVerification || email, password })
+            });
+            const loginData = await loginRes.json();
+            if (loginData.success && loginData.user) {
+              if (loginData.token) {
+                localStorage.setItem("BEU_AUTH_TOKEN", loginData.token);
+              }
+              onAuthSuccess(loginData.user);
+            } else {
+              setActiveTab("signin");
+              setEmail(emailForVerification || email);
+            }
+          } catch (loginErr) {
+            setActiveTab("signin");
+            setEmail(emailForVerification || email);
+          }
+        }, 1200);
       } else {
-        setError(data.message || "Verification code invalid.");
+        setError(data.message || "Invalid verification code.");
       }
     } catch (err: any) {
       const errMsg = err?.message || String(err);
@@ -511,6 +529,39 @@ export default function AuthScreen({ onAuthSuccess, locale, t }: AuthScreenProps
                         required
                       />
                     </div>
+                  </div>
+
+                  {/* Stacked 4-Digit Security PIN (App Unlock Code) stacked right under Email */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-amber-400 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                      <span>{locale === "am" ? "መተግበሪያውን መክፈቻ ባለ 4-ዲጂት ፒን (App Unlock PIN)" : "4-Digit App Unlock PIN"}</span>
+                      <span className="text-[9px] font-mono text-zinc-400 uppercase font-normal">(4 Digits)</span>
+                    </label>
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-amber-400">
+                        <KeyRound size={16} />
+                      </span>
+                      <input
+                        type={showAppUnlockPin ? "text" : "password"}
+                        maxLength={4}
+                        value={appUnlockPin}
+                        onChange={(e) => setAppUnlockPin(e.target.value.replace(/\D/g, ""))}
+                        placeholder="1234"
+                        className="w-full bg-[#121215] border border-amber-400/50 focus:border-amber-400 rounded-xl pl-10 pr-10 py-3 text-sm font-mono text-amber-300 font-black tracking-widest placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-amber-400/50 transition-all"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowAppUnlockPin(!showAppUnlockPin)}
+                        className="absolute inset-y-0 right-0 flex items-center pr-3.5 text-zinc-400 hover:text-amber-400 transition-colors cursor-pointer"
+                        title={showAppUnlockPin ? "Hide PIN" : "Show PIN"}
+                      >
+                        {showAppUnlockPin ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-zinc-500 mt-1">
+                      {locale === "am" ? "መተግበሪያውን በፍጥነት ለመክፈት የሚያገለግል ባለ 4-ዲጂት ፒን ኮድ" : "4-digit security passcode stored on device to quickly unlock the app"}
+                    </p>
                   </div>
 
                   {/* Phone */}

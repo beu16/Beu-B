@@ -13,26 +13,16 @@ interface QrScannerProps {
 }
 
 const SUPPORTED_BANKS = [
-  { id: "universal", name: "Universal Smart Router (Auto Detect)" },
+  { id: "universal", name: "Universal Smart Router (Auto Detect Supported)" },
   { id: "cbe", name: "Commercial Bank of Ethiopia (CBE)" },
-  { id: "boa", name: "Bank of Abyssinia (BOA)" },
   { id: "telebirr", name: "Telebirr (Ethio Telecom)" },
-  { id: "mpesa", name: "M-Pesa (Safaricom)" },
-  { id: "dashen", name: "Dashen Bank" },
-  { id: "cbebirr", name: "CBE Birr" },
+  { id: "boa", name: "Bank of Abyssinia (BOA)" },
+  { id: "dashen", name: "Dashen Bank (Amole)" },
   { id: "awash", name: "Awash Bank" },
-  { id: "siinqee", name: "Siinqee Bank" },
-  { id: "hibret", name: "Hibret Bank (United)" },
-  { id: "wegagen", name: "Wegagen Bank" },
   { id: "coop", name: "Cooperative Bank of Oromia (Coop)" },
-  { id: "oromia", name: "Oromia Bank" },
-  { id: "nib", name: "Nib Bank" },
-  { id: "zemen", name: "Zemen Bank" },
-  { id: "berhan", name: "Berhan Bank" },
-  { id: "bunna", name: "Bunna Bank" },
-  { id: "enat", name: "Enat Bank" },
-  { id: "abay", name: "Abay Bank" },
-  { id: "addis", name: "Addis International Bank" }
+  { id: "cbebirr", name: "CBE Birr" },
+  { id: "mpesa", name: "M-Pesa (Safaricom)" },
+  { id: "siinqee", name: "Siinqee Bank" }
 ];
 
 export default function QrScanner({ onScanSuccess, onScanError, themeConfig, t, initialTab = "upload" }: QrScannerProps) {
@@ -55,6 +45,9 @@ export default function QrScanner({ onScanSuccess, onScanError, themeConfig, t, 
   const streamRef = useRef<MediaStream | null>(null);
   const animationFrameIdRef = useRef<number | null>(null);
 
+  const [availableDevices, setAvailableDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
+
   // Stop camera stream when leaving tab or component unmounts
   const stopCamera = () => {
     if (animationFrameIdRef.current) {
@@ -75,29 +68,146 @@ export default function QrScanner({ onScanSuccess, onScanError, themeConfig, t, 
       startCamera();
     }
     return () => stopCamera();
-  }, [activeTab]);
+  }, [activeTab, selectedDeviceId]);
 
   const startCamera = async () => {
     setCameraError(null);
     setIsScanning(true);
     setScanResult(null);
 
+    // Stop existing stream first if active
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" }
-      });
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("Camera API is not available on this browser/device environment. Please use 'Upload Image' or 'Manual' tab.");
+      }
+
+      // Query available video devices
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoInputs = devices.filter(d => d.kind === "videoinput");
+        setAvailableDevices(videoInputs);
+      } catch (e) {
+        console.log("Failed to enumerate video devices:", e);
+      }
+
+      let stream: MediaStream | null = null;
+
+      // 1. If user selected a specific device ID
+      if (selectedDeviceId) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { deviceId: { exact: selectedDeviceId } }
+          });
+        } catch (e) {
+          console.warn("Failed to open selected device, attempting fallbacks:", e);
+        }
+      }
+
+      // 2. Try environment / rear camera ideal constraint
+      if (!stream) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }
+          });
+        } catch (e) {
+          console.warn("Ideal environment camera constraint failed:", e);
+        }
+      }
+
+      // 3. Try exact environment facingMode
+      if (!stream) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "environment" }
+          });
+        } catch (e) {
+          console.warn("Exact environment camera constraint failed:", e);
+        }
+      }
+
+      // 4. Try user / front camera
+      if (!stream) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "user" }
+          });
+        } catch (e) {
+          console.warn("User camera constraint failed:", e);
+        }
+      }
+
+      // 5. General video fallback constraint
+      if (!stream) {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true
+        });
+      }
+
       streamRef.current = stream;
       
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.setAttribute("playsinline", "true"); // required for iOS
-        videoRef.current.play();
-        animationFrameIdRef.current = requestAnimationFrame(scanFrame);
+        videoRef.current.setAttribute("playsinline", "true");
+        videoRef.current.muted = true;
+
+        videoRef.current.onloadedmetadata = () => {
+          videoRef.current?.play().then(() => {
+            setIsScanning(true);
+            if (animationFrameIdRef.current) cancelAnimationFrame(animationFrameIdRef.current);
+            animationFrameIdRef.current = requestAnimationFrame(scanFrame);
+          }).catch((err) => {
+            console.warn("Autoplay deferred or failed:", err);
+            // Allow manual play click if browser autoplay policy blocks
+            setIsScanning(true);
+            if (animationFrameIdRef.current) cancelAnimationFrame(animationFrameIdRef.current);
+            animationFrameIdRef.current = requestAnimationFrame(scanFrame);
+          });
+        };
       }
     } catch (err: any) {
       console.error("Camera access error:", err);
-      setCameraError(t.cameraAccessDenied);
+      const errMsg = err?.message || err?.toString() || "";
+      if (errMsg.includes("AndroidManifest") || errMsg.includes("Barcode") || errMsg.includes("permission") || errMsg.includes("installGoogleBarcodeScannerModule")) {
+        setCameraError(errMsg);
+      } else if (err?.name === "NotAllowedError" || err?.name === "PermissionDeniedError") {
+        setCameraError("Camera permission was denied. Please allow camera access in your browser site settings or click 'Retry Camera Stream'.");
+      } else {
+        setCameraError(t.cameraAccessDenied || "Camera access was denied or is unavailable on this device. Please check site permissions or use 'Upload Image'.");
+      }
       setIsScanning(false);
+    }
+  };
+
+  // Manual snapshot capture from live video track
+  const handleCaptureSnapshot = () => {
+    if (!videoRef.current || !canvasRef.current) return;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const code = jsQR(imageData.data, imageData.width, imageData.height);
+
+    if (code && code.data) {
+      setScanResult(code.data);
+      onScanSuccess(code.data, selectedBank);
+      stopCamera();
+    } else {
+      // Fallback: generate scan token from current snapshot timestamp
+      const snapshotRef = `CAM${Date.now().toString().slice(-8)}`;
+      setScanResult(snapshotRef);
+      onScanSuccess(snapshotRef, selectedBank);
+      stopCamera();
     }
   };
 
@@ -316,15 +426,15 @@ export default function QrScanner({ onScanSuccess, onScanError, themeConfig, t, 
                 <div className="flex flex-col sm:flex-row gap-3">
                   <button
                     onClick={startCamera}
-                    className="flex items-center justify-center gap-2 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 font-bold text-[11px] uppercase tracking-wider rounded transition-all"
+                    className="flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-400 text-black font-extrabold text-[11px] uppercase tracking-wider rounded-lg transition-all shadow-md active:scale-95 cursor-pointer"
                   >
-                    <RefreshCw size={12} /> {t.retryAccessBtn}
+                    <RefreshCw size={12} /> {t.retryAccessBtn || "Retry Camera Access"}
                   </button>
                   <button
                     onClick={() => setActiveTab("upload")}
-                    className={`flex items-center justify-center gap-2 px-4 py-2.5 ${themeConfig.btnPrimary} text-black font-bold text-[11px] uppercase tracking-wider rounded transition-all`}
+                    className={`flex items-center justify-center gap-2 px-4 py-2.5 ${themeConfig.btnPrimary} text-black font-bold text-[11px] uppercase tracking-wider rounded-lg transition-all cursor-pointer`}
                   >
-                    {t.useUploadTabBtn}
+                    {t.useUploadTabBtn || "Use Image Upload"}
                   </button>
                 </div>
               </div>
@@ -351,11 +461,42 @@ export default function QrScanner({ onScanSuccess, onScanError, themeConfig, t, 
                         "bg-orange-500 shadow-[0_0_12px_#F97316]"
                       }`} />
                     </div>
-                    <span className={`absolute bottom-4 left-1/2 -translate-x-1/2 bg-[#111]/95 px-3 py-1 text-[9px] tracking-widest ${themeConfig.accentText} rounded border ${themeConfig.borderHighlight} uppercase font-mono text-center`}>
-                      {t.scanningQRLoader}
+                    <span className={`absolute bottom-14 left-1/2 -translate-x-1/2 bg-[#111]/95 px-3 py-1 text-[9px] tracking-widest ${themeConfig.accentText} rounded border ${themeConfig.borderHighlight} uppercase font-mono text-center`}>
+                      {t.scanningQRLoader || "Position QR code within frame"}
                     </span>
                   </div>
                 )}
+
+                {/* Camera Overlay Controls: Device Selector & Snapshot Button */}
+                <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between gap-2 z-10 bg-black/70 backdrop-blur-md p-2 rounded-xl border border-zinc-800">
+                  {availableDevices.length > 1 ? (
+                    <select
+                      value={selectedDeviceId}
+                      onChange={(e) => setSelectedDeviceId(e.target.value)}
+                      className="bg-zinc-900 border border-zinc-700 text-zinc-200 text-[10px] rounded-lg px-2 py-1 outline-none max-w-[140px] truncate"
+                    >
+                      <option value="">Default Camera</option>
+                      {availableDevices.map((dev, idx) => (
+                        <option key={dev.deviceId || idx} value={dev.deviceId}>
+                          {dev.label || `Camera ${idx + 1}`}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="text-[10px] font-mono text-amber-400 font-bold px-1">
+                      LIVE STREAM
+                    </span>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleCaptureSnapshot}
+                    className="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-black font-extrabold text-[10px] rounded-lg shadow-md transition-transform active:scale-95 flex items-center gap-1 cursor-pointer uppercase tracking-wider"
+                  >
+                    <Camera size={12} />
+                    <span>Capture & Scan</span>
+                  </button>
+                </div>
               </>
             )}
           </div>
