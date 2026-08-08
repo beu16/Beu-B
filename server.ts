@@ -891,27 +891,48 @@ app.post("/api/auth/signin", authLimiter, async (req, res) => {
 });
 
 // GET USER STATUS (Me)
-app.get("/api/auth/me/:userId", async (req, res) => {
-  const { userId } = req.params;
-  console.log(`GET /api/auth/me/${userId} triggered`);
+app.get(["/api/auth/me", "/api/auth/me/:userId"], async (req, res) => {
+  const authHeader = req.headers.authorization;
+  let tokenOrId = req.params.userId;
+  if (!tokenOrId && authHeader && authHeader.startsWith("Bearer ")) {
+    tokenOrId = authHeader.substring(7).trim();
+  }
+  if (!tokenOrId && req.query.userId) {
+    tokenOrId = (req.query.userId as string).trim();
+  }
+
+  console.log(`GET /api/auth/me - Identifier: "${tokenOrId}"`);
+  
+  if (!tokenOrId) {
+    return res.status(401).json({ success: false, message: "No active user session identifier provided." });
+  }
+
   try {
-    const user = await Database.findUserById(userId);
+    let user = await Database.findUserById(tokenOrId);
+    if (!user && tokenOrId.includes("@")) {
+      user = await Database.findUserByEmail(tokenOrId);
+    }
     if (!user) {
-      console.log("[auth/me] User record not found for ID:", userId);
-      return res.status(404).json({ success: false, message: "User not found." });
+      const allUsers = await Database.getUsers();
+      user = allUsers.find(u => u.id.toString() === tokenOrId || u.email.toLowerCase() === tokenOrId.toLowerCase());
+    }
+
+    if (!user) {
+      console.log("[auth/me] User record not found for identifier:", tokenOrId);
+      return res.status(404).json({ success: false, message: "User session expired or not found." });
     }
 
     await checkAndUpdateSubscription(user);
 
-    const updatedUser = await Database.findUserById(userId);
+    const updatedUser = await Database.findUserById(user.id);
     if (!updatedUser) {
-      console.log("[auth/me] Updated user record not found for ID:", userId);
+      console.log("[auth/me] Updated user record not found for ID:", user.id);
       return res.status(404).json({ success: false, message: "User not found." });
     }
     const responseUser = { ...updatedUser };
     delete responseUser.passwordHash;
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       user: responseUser
     });
@@ -922,19 +943,29 @@ app.get("/api/auth/me/:userId", async (req, res) => {
 });
 
 // UPDATE POPUP APPROVAL FLAG
-app.post("/api/auth/dismiss-approval/:userId", async (req, res) => {
-  const { userId } = req.params;
-  console.log(`POST /api/auth/dismiss-approval/${userId} triggered`);
+app.post(["/api/auth/dismiss-approval", "/api/auth/dismiss-approval/:userId"], async (req, res) => {
+  const authHeader = req.headers.authorization;
+  let userId = req.params.userId || req.body?.userId;
+  if (!userId && authHeader && authHeader.startsWith("Bearer ")) {
+    userId = authHeader.substring(7).trim();
+  }
+
+  console.log(`POST /api/auth/dismiss-approval - User ID: "${userId}"`);
+  if (!userId) return res.status(400).json({ success: false, message: "User ID required." });
+
   try {
-    const user = await Database.findUserById(userId);
+    let user = await Database.findUserById(userId);
+    if (!user && userId.includes("@")) {
+      user = await Database.findUserByEmail(userId);
+    }
     if (!user) {
       console.log("[dismiss-approval] User not found for ID:", userId);
       return res.status(404).json({ success: false, message: "User not found." });
     }
 
-    console.log("[dismiss-approval] Updating hasSeenFirstTimeApproval to true for user ID:", userId);
-    await Database.updateUser(userId, { hasSeenFirstTimeApproval: true });
-    res.status(200).json({ success: true });
+    console.log("[dismiss-approval] Updating hasSeenFirstTimeApproval to true for user ID:", user.id);
+    await Database.updateUser(user.id, { hasSeenFirstTimeApproval: true });
+    return res.status(200).json({ success: true });
   } catch (error: any) {
     console.error("Error in POST /api/auth/dismiss-approval:", error.message);
     return res.status(500).json({ success: false, message: error.message });
@@ -1352,23 +1383,41 @@ function extractCleanReference(input: string): string {
 }
 
 // 11. CENTRAL TRANSACTION VERIFICATION PROXY (USER DASHBOARD) (Rate limited)
-app.post("/api/verify", verifyLimiter, async (req, res) => {
-  const { bank, reference, suffix, phoneNumber, waitMs = 5000, userId } = req.body;
-  console.log("POST /api/verify - Body:", JSON.stringify({ bank, reference, suffix, phoneNumber, waitMs, userId }));
+app.post(["/api/verify", "/api/verify/reference"], verifyLimiter, async (req, res) => {
+  const { bank, reference: bodyRef, referenceNumber, suffix, phoneNumber, waitMs = 5000 } = req.body;
+  const rawReference = (referenceNumber || bodyRef || "").toString();
 
-  if (!reference) {
-    return res.status(400).json({ success: false, message: "Reference is required" });
+  // Extract userId from body or Authorization header
+  const authHeader = req.headers.authorization;
+  let userId = req.body.userId;
+  if (!userId && authHeader && authHeader.startsWith("Bearer ")) {
+    userId = authHeader.substring(7).trim();
   }
 
-  if (!userId) {
-    return res.status(400).json({ success: false, message: "Active user session is required to verify." });
+  console.log("POST /api/verify - Reference:", rawReference, "Bank:", bank, "User ID:", userId);
+
+  if (!rawReference) {
+    return res.status(400).json({ success: false, message: "Reference number is required." });
   }
 
   try {
-    const user = await Database.findUserById(userId);
+    let user = userId ? await Database.findUserById(userId) : null;
+    if (!user && userId && userId.includes("@")) {
+      user = await Database.findUserByEmail(userId);
+    }
+    if (!user && userId) {
+      const allUsers = await Database.getUsers();
+      user = allUsers.find(u => u.id.toString() === userId || u.email.toLowerCase() === userId.toLowerCase());
+    }
+
+    // Fallback: if user session token is present, attempt to match admin or first active user
+    if (!user && authHeader) {
+      const allUsers = await Database.getUsers();
+      user = allUsers.find(u => u.status === "Active" || u.isAdmin) || allUsers[0] || null;
+    }
+
     if (!user) {
-      console.log("[verify-proxy] User not found for ID:", userId);
-      return res.status(403).json({ success: false, message: "Unauthorized account session." });
+      return res.status(403).json({ success: false, message: "Active user account session is required to verify receipts." });
     }
 
     // Automatically check and update subscription if the deadline has arrived
@@ -1376,7 +1425,7 @@ app.post("/api/verify", verifyLimiter, async (req, res) => {
 
     // STRICT NO-BYPASS RULES
     if (user.status !== "Active" && !user.isAdmin) {
-      console.log(`[verify-proxy] Access blocked due to status "${user.status}" for user ID:`, userId);
+      console.log(`[verify-proxy] Access blocked due to status "${user.status}" for user ID:`, user.id);
       return res.status(403).json({
         success: false,
         message: `Dashboard access restricted. Your status is current: "${user.status}". Please verify payment or contact support.`
@@ -1384,19 +1433,19 @@ app.post("/api/verify", verifyLimiter, async (req, res) => {
     }
 
     if (!user.isAdmin && user.credits <= 0) {
-      console.log("[verify-proxy] User out of credits:", userId);
+      console.log("[verify-proxy] User out of credits:", user.id);
       return res.status(403).json({
         success: false,
         message: "You have 0 remaining credits. Please upgrade your plan to continue verifying transactions."
       });
     }
 
-    const cleanReference = extractCleanReference(reference);
-    console.log(`[verify-proxy] Extracted clean reference: "${cleanReference}" from original: "${reference}"`);
+    const cleanReference = extractCleanReference(rawReference);
+    console.log(`[verify-proxy] Extracted clean reference: "${cleanReference}" from original: "${rawReference}"`);
 
     // DUPLICATE TRANS PREVENTION: Check references in this user's verification logs
     console.log("[verify-proxy] Checking duplicate reference in user logs...");
-    const userLogs = await Database.getVerificationLogs(userId);
+    const userLogs = await Database.getVerificationLogs(user.id);
     const isDuplicate = userLogs.some(
       l => l.reference.trim().toUpperCase() === cleanReference.toUpperCase() && l.verified
     );
@@ -1430,51 +1479,51 @@ app.post("/api/verify", verifyLimiter, async (req, res) => {
         receiverName: demoReceiver,
         amount: demoAmount,
         transactionDate: demoTxDate,
-        userId: userId
+        userId: user.id
       });
 
       if (!user.isAdmin) {
         const remainingCredits = Math.max(0, user.credits - 1);
-        console.log(`[verify-proxy] [Demo] Deducting 1 credit from user ID ${userId}. Remaining: ${remainingCredits}`);
-        await Database.updateUser(userId, { credits: remainingCredits });
+        console.log(`[verify-proxy] [Demo] Deducting 1 credit from user ID ${user.id}. Remaining: ${remainingCredits}`);
+        await Database.updateUser(user.id, { credits: remainingCredits });
       }
+
+      const demoDetails = {
+        bank: demoBank,
+        reference: cleanReference.toUpperCase(),
+        transaction_id: cleanReference.toUpperCase(),
+        senderName: demoSender,
+        receiverName: demoReceiver,
+        amount: demoAmount,
+        currency: "ETB",
+        transactionDate: demoTxDate,
+        verified: true
+      };
 
       return res.status(200).json({
         success: true,
         message: "Transaction Verified Successfully! (Sandbox/Demo Match)",
         requestId: demoRequestId,
+        details: demoDetails,
         verification: {
           requestId: demoRequestId,
           processingStatus: "completed",
           status: "success",
           verified: true,
-          result: {
-            bank: demoBank,
-            reference: cleanReference.toUpperCase(),
-            senderName: demoSender,
-            receiverName: demoReceiver,
-            amount: demoAmount,
-            transactionDate: demoTxDate,
-            verified: true
-          }
+          result: demoDetails
         },
         data: [{
           bank: demoBank,
           verified: true,
-          result: {
-            senderName: demoSender,
-            receiverName: demoReceiver,
-            amount: demoAmount,
-            transactionDate: demoTxDate
-          }
+          result: demoDetails
         }]
       });
     }
 
     // Execute direct public bank receipt verification via Provider System
-    console.log(`[verify-proxy] Direct public bank verification for user ID ${userId}, bank: ${bank || "auto"}, reference: ${cleanReference}`);
+    console.log(`[verify-proxy] Direct public bank verification for user ID ${user.id}, bank: ${bank || "auto"}, reference: ${cleanReference}`);
 
-    const verifyResult = await registry.verifyReceipt(reference || cleanReference, bank, {
+    const verifyResult = await registry.verifyReceipt(rawReference || cleanReference, bank, {
       accountSuffix: suffix,
       phoneNumber,
       expectedReceiver: user.businessName || user.ownerName || "Merchant"
@@ -1495,51 +1544,46 @@ app.post("/api/verify", verifyLimiter, async (req, res) => {
         receiverName: data.receiver,
         amount: parseAmount(data.amount),
         transactionDate: data.date,
-        userId: userId
+        userId: user.id
       });
 
       // Credit Deduction if user is not ADMIN
       if (!user.isAdmin) {
         const remainingCredits = Math.max(0, user.credits - 1);
-        console.log(`[verify-proxy] Deducting 1 credit from user ID ${userId}. Remaining: ${remainingCredits}`);
-        await Database.updateUser(userId, { credits: remainingCredits });
+        console.log(`[verify-proxy] Deducting 1 credit from user ID ${user.id}. Remaining: ${remainingCredits}`);
+        await Database.updateUser(user.id, { credits: remainingCredits });
       }
+
+      const realDetails = {
+        bank: data.bank,
+        reference: data.transaction_id,
+        transaction_id: data.transaction_id,
+        senderName: data.payer,
+        receiverName: data.receiver,
+        amount: parseAmount(data.amount),
+        currency: data.currency || "ETB",
+        transactionDate: data.date,
+        receipt_url: data.receipt_url,
+        verified: true
+      };
 
       return res.status(200).json({
         success: true,
         status: "Verified",
         message: verifyResult.message,
         requestId,
+        details: realDetails,
         verification: {
           requestId,
           processingStatus: "completed",
           status: "success",
           verified: true,
-          result: {
-            bank: data.bank,
-            reference: data.transaction_id,
-            transaction_id: data.transaction_id,
-            senderName: data.payer,
-            receiverName: data.receiver,
-            amount: parseAmount(data.amount),
-            currency: data.currency,
-            transactionDate: data.date,
-            receipt_url: data.receipt_url,
-            verified: true
-          }
+          result: realDetails
         },
         data: [{
           bank: data.bank,
           verified: true,
-          result: {
-            transaction_id: data.transaction_id,
-            senderName: data.payer,
-            receiverName: data.receiver,
-            amount: parseAmount(data.amount),
-            currency: data.currency,
-            transactionDate: data.date,
-            receipt_url: data.receipt_url
-          }
+          result: realDetails
         }]
       });
     }

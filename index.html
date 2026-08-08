@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" style="background-color: #070709; color-scheme: dark;">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
@@ -15,6 +15,15 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#070709" />
+    <style>
+      html, body {
+        background-color: #070709 !important;
+        color: #ffffff !important;
+        margin: 0;
+        padding: 0;
+        overflow-x: hidden;
+      }
+    </style>
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
@@ -84,8 +93,19 @@
       })();
     </script>
   </head>
-  <body>
-    <div id="root"></div>
+  <body style="background-color: #070709; color: #ffffff; margin: 0; padding: 0;">
+    <div id="root">
+      <div style="min-height: 100vh; background-color: #070709; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: system-ui, -apple-system, sans-serif; color: #ffffff;">
+        <div style="width: 44px; height: 44px; border: 3px solid #FFD700; border-top-color: transparent; border-radius: 50%; animation: beuSpin 0.8s linear infinite; margin-bottom: 16px;"></div>
+        <p style="font-size: 12px; color: #888899; text-transform: uppercase; letter-spacing: 2px; font-weight: 700; margin: 0;">Beu Verify Platform</p>
+      </div>
+      <style>
+        @keyframes beuSpin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      </style>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
