@@ -34,7 +34,14 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Network first fallback to cache strategy for API, or cache first for static assets
+  const url = new URL(event.request.url);
+
+  // 1. Never intercept API requests or non-GET requests - let browser handle network directly
+  if (url.pathname.startsWith('/api') || event.request.method !== 'GET') {
+    return;
+  }
+
+  // 2. Navigation fallback for single page app
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request).catch(() => {
@@ -44,6 +51,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   
+  // 3. Cache first for static assets with network fallback
   event.respondWith(
     caches.match(event.request).then((response) => {
       return response || fetch(event.request);

@@ -132,7 +132,7 @@ export default function ResultDisplay({ result, onClose, themeConfig, t }: Resul
               ? "bg-amber-500/10 border-amber-500/20 text-amber-400"
               : "bg-rose-500/10 border-rose-500/20 text-rose-400"
           }`}>
-            {result.bank.toUpperCase()} SECURE {isVerified ? "CHECKPASS" : isPending ? "PENDING" : "CHECKFAIL"}
+            {(result.bank || "CBO").toUpperCase()} SECURE {isVerified ? "CHECKPASS" : isPending ? "PENDING" : "CHECKFAIL"}
           </div>
         </div>
 
@@ -247,7 +247,7 @@ export default function ResultDisplay({ result, onClose, themeConfig, t }: Resul
             </div>
             <div className="flex items-center gap-1 text-[9px] text-zinc-400 font-mono">
               <span>REQUEST ID:</span>
-              <span className={`font-bold ${themeConfig.accentText}`}>{result.requestId.slice(0, 10)}...</span>
+              <span className={`font-bold ${themeConfig.accentText}`}>{((result.requestId || "REQ-BEU").toString()).slice(0, 10)}...</span>
             </div>
           </div>
 

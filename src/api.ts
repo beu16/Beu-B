@@ -36,17 +36,24 @@ export const getApiUrl = (endpoint: string): string => {
     return `${base}${cleanEndpoint}`;
   }
 
-  // 2. Check stored custom server URL in mobile settings
   if (typeof window !== "undefined") {
+    const hostname = window.location.hostname || "";
+    const protocol = window.location.protocol || "";
+    
+    // 2. If running in a web browser (localhost, 127.0.0.1, Cloud Run, custom domain), use relative path directly
+    if (hostname === "localhost" || hostname === "127.0.0.1" || hostname.includes("run.app") || protocol.startsWith("http")) {
+      return cleanEndpoint;
+    }
+
+    // 3. Check stored custom server URL in mobile settings
     const savedServer = localStorage.getItem("BEU_SERVER_URL");
     if (savedServer && savedServer.trim()) {
       const base = savedServer.trim().endsWith("/") ? savedServer.trim().slice(0, -1) : savedServer.trim();
       return `${base}${cleanEndpoint}`;
     }
 
-    // 3. Mobile WebView / APK scheme detection (file://, capacitor://, ionic://, android-app:)
-    const origin = window.location.origin || "";
-    const isMobileScheme = origin.startsWith("file:") || origin.startsWith("capacitor:") || origin.startsWith("ionic:") || origin.startsWith("content:") || (window.location.hostname === "localhost" && window.location.port !== "3000");
+    // 4. True mobile APK / WebView scheme detection (file://, capacitor://, ionic://, content://)
+    const isMobileScheme = protocol.startsWith("file") || protocol.startsWith("capacitor") || protocol.startsWith("ionic") || protocol.startsWith("content");
 
     if (isMobileScheme) {
       // Connect to the official production hosted backend server URL

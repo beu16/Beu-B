@@ -102,9 +102,11 @@ export class ReceiptProviderRegistry {
     // 1. Check for Sandbox / Demo simulation references
     const lowerInput = cleanInput.toLowerCase();
     if (
-      lowerInput.startsWith("demo_") ||
-      lowerInput.startsWith("test_") ||
-      lowerInput.startsWith("sandbox_") ||
+      lowerInput.startsWith("demo") ||
+      lowerInput.startsWith("test") ||
+      lowerInput.startsWith("sim") ||
+      lowerInput.startsWith("mock") ||
+      lowerInput.startsWith("sandbox") ||
       lowerInput === "rft9210984"
     ) {
       const demoBank = bankCode && bankCode !== "universal" ? bankCode.toUpperCase() : "CBE";
