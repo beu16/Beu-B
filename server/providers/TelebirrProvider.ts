@@ -54,6 +54,7 @@ export class TelebirrProvider extends BaseReceiptProvider {
 
     try {
       const $ = cheerio.load(content);
+      $("script, style, noscript, svg, head, iframe, link, meta").remove();
       const fullText = $.text().replace(/\s+/g, " ");
 
       // Check if not found or invalid

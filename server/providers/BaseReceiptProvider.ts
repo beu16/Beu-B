@@ -26,11 +26,43 @@ export abstract class BaseReceiptProvider {
   abstract parseReceipt(content: string, url: string, options?: ProviderOptions): NormalizedReceiptData | null;
 
   /**
-   * Utility helper to safely clean strings
+   * Utility helper to detect CSS noise, font family names, or HTML artifact strings
+   */
+  protected isNoise(val: string): boolean {
+    if (!val) return true;
+    const l = val.toLowerCase().trim();
+    return (
+      l.includes("emoji") ||
+      l.includes("font") ||
+      l.includes("sans-serif") ||
+      l.includes("serif") ||
+      l.includes("border") ||
+      l.includes("padding") ||
+      l.includes("color") ||
+      l.includes("margin") ||
+      l.includes("display") ||
+      l.includes("flex") ||
+      l.includes("width") ||
+      l.includes("height") ||
+      l.includes("background") ||
+      l.includes("inherit") ||
+      l.includes("stylesheet") ||
+      l.includes("roboto") ||
+      l.includes("inter") ||
+      l.includes("system-ui") ||
+      l.includes("apple-system") ||
+      l.includes("none")
+    );
+  }
+
+  /**
+   * Utility helper to safely clean strings and scrub HTML / CSS noise
    */
   protected cleanString(val: any): string {
     if (!val) return "";
-    return val.toString().replace(/\s+/g, " ").trim();
+    const str = val.toString().replace(/\s+/g, " ").trim();
+    if (this.isNoise(str)) return "";
+    return str;
   }
 
   /**
@@ -181,18 +213,29 @@ export abstract class BaseReceiptProvider {
           if (!isVerified) return null;
 
           const txId = resultObj.transactionNumber || resultObj.receiptNumber || resultObj.reference || cleanRef;
-          const payer = resultObj.senderName || resultObj.bankSpecific?.payerName || resultObj.payer || "Customer";
-          const receiver = resultObj.receiverName || resultObj.bankSpecific?.creditedPartyName || resultObj.payee || "Merchant";
-          const amountVal = resultObj.amount || resultObj.settledAmountValue || resultObj.bankSpecific?.settledAmountValue || 0;
-          const dateVal = resultObj.timestamp || resultObj.bankSpecific?.paymentDateIsoUtc || resultObj.paymentDate || new Date().toISOString();
+          let rawPayer = resultObj.senderName || resultObj.bankSpecific?.payerName || resultObj.payer || "";
+          let rawReceiver = resultObj.receiverName || resultObj.bankSpecific?.creditedPartyName || resultObj.payee || "";
+          
+          if (this.isNoise(rawPayer)) rawPayer = "";
+          if (this.isNoise(rawReceiver)) rawReceiver = "";
+
+          const finalPayer = this.cleanString(rawPayer) || options.extractedPayer || (options.phoneNumber ? `Customer (${options.phoneNumber})` : "Bank Customer");
+          const finalReceiver = this.cleanString(rawReceiver) || options.extractedReceiver || options.expectedReceiver || "Merchant";
+          
+          let parsedAmountNum = this.parseAmountNumber(resultObj.amount || resultObj.settledAmountValue || resultObj.bankSpecific?.settledAmountValue || 0);
+          if ((parsedAmountNum === 0 || parsedAmountNum === 1.25) && options.extractedAmount && options.extractedAmount > 0) {
+            parsedAmountNum = options.extractedAmount;
+          }
+
+          const dateVal = resultObj.timestamp || resultObj.bankSpecific?.paymentDateIsoUtc || resultObj.paymentDate || options.extractedDate || new Date().toISOString();
 
           return {
             verified: true,
             bank: this.bankCode,
             transaction_id: txId,
-            payer: this.cleanString(payer),
-            receiver: this.cleanString(receiver),
-            amount: this.parseAmountNumber(amountVal).toFixed(2),
+            payer: finalPayer,
+            receiver: finalReceiver,
+            amount: parsedAmountNum > 0 ? parsedAmountNum.toFixed(2) : "0.00",
             currency: "ETB",
             date: dateVal,
             reference: txId,
@@ -269,7 +312,7 @@ export abstract class BaseReceiptProvider {
         const cleanRef = ftMatch ? ftMatch[0].toUpperCase() : cleanInput.toUpperCase();
         
         // Use extracted details if provided in options or fallback defaults
-        const payerName = options.extractedPayer || (options.phoneNumber ? `Customer (${options.phoneNumber})` : "Abebe Bikila");
+        const payerName = options.extractedPayer || (options.phoneNumber ? `Customer (${options.phoneNumber})` : "Bank Customer");
         const receiverName = options.extractedReceiver || options.expectedReceiver || "Beu Verify Merchant";
         const txAmount = options.extractedAmount 
           ? options.extractedAmount.toFixed(2) 

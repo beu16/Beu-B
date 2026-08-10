@@ -55,6 +55,10 @@ export class CBEProvider extends BaseReceiptProvider {
 
     try {
       const $ = cheerio.load(content);
+      
+      // Clean DOM by removing scripts, styles, SVGs, and iframe elements that contain CSS noise
+      $("script, style, noscript, svg, head, iframe, link, meta").remove();
+
       const fullText = $.text().replace(/\s+/g, " ");
 
       // Check if page indicates not found or invalid
@@ -73,58 +77,111 @@ export class CBEProvider extends BaseReceiptProvider {
       let dateStr = "";
       let reference = "";
 
-      // Extract from table rows or key-value pairs using Cheerio
-      $("tr, div, p").each((_, el) => {
-        const text = $(el).text().replace(/\s+/g, " ").trim();
-        const lower = text.toLowerCase();
+      const isNoise = (s: string) => {
+        if (!s) return true;
+        const l = s.toLowerCase();
+        return (
+          l.includes("emoji") ||
+          l.includes("font") ||
+          l.includes("sans-serif") ||
+          l.includes("border") ||
+          l.includes("padding") ||
+          l.includes("color") ||
+          l.includes("margin") ||
+          l.includes("display") ||
+          l.includes("flex") ||
+          l.includes("width") ||
+          l.includes("height")
+        );
+      };
 
-        if (lower.includes("transaction id") || lower.includes("ft number") || lower.includes("reference")) {
-          const match = text.match(/FT[A-Z0-9]{8,14}/i) || text.split(/[:\-]/)[1]?.trim();
-          if (match && !transactionId) {
-            transactionId = typeof match === "string" ? match : match[0];
+      // 1. Extract from standard <tr> table rows: <td>label</td><td>value</td>
+      $("tr").each((_, tr) => {
+        const tds = $(tr).find("td, th");
+        if (tds.length >= 2) {
+          const label = $(tds[0]).text().trim().toLowerCase();
+          const val = $(tds[1]).text().trim();
+
+          if (val && !isNoise(val)) {
+            if ((label.includes("transaction") || label.includes("ft number") || label.includes("reference") || label.includes("receipt")) && !transactionId) {
+              transactionId = val;
+            }
+            if ((label.includes("payer") || label.includes("sender") || label.includes("from") || label.includes("debited")) && !payer) {
+              payer = val;
+            }
+            if ((label.includes("receiver") || label.includes("beneficiary") || label.includes("to") || label.includes("credited")) && !receiver) {
+              receiver = val;
+            }
+            if ((label.includes("amount") || label.includes("transfer amount")) && !amountStr) {
+              amountStr = val;
+            }
+            if ((label.includes("date") || label.includes("time")) && !dateStr) {
+              dateStr = val;
+            }
           }
-        }
-
-        if (lower.includes("payer") || lower.includes("sender") || lower.includes("debited account") || lower.includes("from")) {
-          const val = text.split(/[:\-]/)[1]?.trim();
-          if (val && !payer) payer = val;
-        }
-
-        if (lower.includes("receiver") || lower.includes("beneficiary") || lower.includes("credited account") || lower.includes("to")) {
-          const val = text.split(/[:\-]/)[1]?.trim();
-          if (val && !receiver) receiver = val;
-        }
-
-        if (lower.includes("amount") || lower.includes("transfer amount") || lower.includes("etb")) {
-          const match = text.match(/([0-9,]+\.?[0-9]*)/);
-          if (match && !amountStr) amountStr = match[1];
-        }
-
-        if (lower.includes("date") || lower.includes("time")) {
-          const val = text.split(/[:\-]/)[1]?.trim();
-          if (val && !dateStr) dateStr = val;
         }
       });
 
-      // Regex fallbacks if Cheerio table parsing missed any fields
+      // 2. Key-value element iteration
+      $("div, p, span, li").each((_, el) => {
+        if ($(el).children().length > 3) return; // Skip large parent wrappers
+        const text = $(el).text().replace(/\s+/g, " ").trim();
+        if (isNoise(text)) return;
+        const lower = text.toLowerCase();
+
+        if (!transactionId && (lower.includes("transaction id") || lower.includes("ft number") || lower.includes("reference"))) {
+          const parts = text.split(/[:\-]/);
+          if (parts[1]) {
+            const val = parts[1].trim();
+            if (!isNoise(val)) transactionId = val;
+          }
+        }
+        if (!payer && (lower.includes("payer") || lower.includes("sender") || lower.includes("debited account") || lower.includes("from"))) {
+          const parts = text.split(/[:\-]/);
+          if (parts[1]) {
+            const val = parts[1].trim();
+            if (!isNoise(val)) payer = val;
+          }
+        }
+        if (!receiver && (lower.includes("receiver") || lower.includes("beneficiary") || lower.includes("credited account") || lower.includes("to"))) {
+          const parts = text.split(/[:\-]/);
+          if (parts[1]) {
+            const val = parts[1].trim();
+            if (!isNoise(val)) receiver = val;
+          }
+        }
+        if (!amountStr && (lower.includes("amount") || lower.includes("transfer amount"))) {
+          const match = text.match(/(?:ETB|Birr|Amount)?[:\s]*([0-9,]+\.[0-9]{2})/i);
+          if (match) amountStr = match[1];
+        }
+        if (!dateStr && (lower.includes("date") || lower.includes("time"))) {
+          const parts = text.split(/[:\-]/);
+          if (parts[1]) {
+            const val = parts[1].trim();
+            if (!isNoise(val)) dateStr = val;
+          }
+        }
+      });
+
+      // 3. Regex fallbacks
       if (!transactionId) {
-        const ftMatch = fullText.match(/\bFT[A-Z0-9]{8,14}\b/i) || url.match(/\bFT[A-Z0-9]{8,14}\b/i);
-        if (ftMatch) transactionId = ftMatch[0].toUpperCase();
+        const ftMatch = fullText.match(/\bFT[A-Z0-9]{8,14}\b/i) || url.match(/\/v2-([A-Za-z0-9_-]+)/i) || url.match(/\/receipt\/([A-Za-z0-9_-]+)/i);
+        if (ftMatch) transactionId = ftMatch[1] ? (ftMatch[1].startsWith("v2-") ? ftMatch[1] : `v2-${ftMatch[1]}`).toUpperCase() : ftMatch[0].toUpperCase();
       }
 
       if (!amountStr) {
-        const amtMatch = fullText.match(/(?:ETB|Birr|Amount)[:\s]*([0-9,]+\.?[0-9]*)/i) || fullText.match(/([0-9,]+\.[0-9]{2})/);
+        const amtMatch = fullText.match(/(?:ETB|Birr|Amount)[:\s]*([0-9,]+\.[0-9]{2})/i) || fullText.match(/([0-9,]+\.[0-9]{2})\s*(?:ETB|Birr)/i);
         if (amtMatch) amountStr = amtMatch[1];
       }
 
-      if (!payer) {
-        const payerMatch = fullText.match(/(?:Payer|Sender|From)[:\s]+([A-Za-z\s]{3,30})/i);
-        if (payerMatch) payer = payerMatch[1].trim();
+      if (!payer || isNoise(payer)) {
+        const payerMatch = fullText.match(/(?:Payer|Sender|Debited Account|From)[:\s]+([A-Za-z\s]{3,35})/i);
+        payer = payerMatch && !isNoise(payerMatch[1]) ? payerMatch[1].trim() : "";
       }
 
-      if (!receiver) {
-        const recMatch = fullText.match(/(?:Beneficiary|Receiver|Credited|To)[:\s]+([A-Za-z\s]{3,30})/i);
-        if (recMatch) receiver = recMatch[1].trim();
+      if (!receiver || isNoise(receiver)) {
+        const recMatch = fullText.match(/(?:Beneficiary|Receiver|Credited Account|To)[:\s]+([A-Za-z\s]{3,35})/i);
+        receiver = recMatch && !isNoise(recMatch[1]) ? recMatch[1].trim() : "";
       }
 
       if (!dateStr) {
@@ -132,23 +189,30 @@ export class CBEProvider extends BaseReceiptProvider {
         if (dateMatch) dateStr = dateMatch[0];
       }
 
-      reference = transactionId || url.split("=")[1] || "CBE_REF";
+      // Extract url token as reference fallback
+      const urlTokenMatch = url.match(/\/v2-([A-Za-z0-9_-]+)/i) || url.match(/\/receipt\/([A-Za-z0-9_-]+)/i) || url.match(/[?&]id=([A-Za-z0-9_-]+)/i);
+      const urlToken = urlTokenMatch ? urlTokenMatch[1] : "";
+
+      reference = transactionId || urlToken || "CBE_REF";
 
       // Calculate numeric amount
       const parsedAmount = this.parseAmountNumber(amountStr);
 
-      // Require at least a transaction ID or amount to consider parsed receipt valid
+      // Require at least a valid transaction ID or positive amount to consider parsed receipt valid
       if (!transactionId && parsedAmount === 0) {
         return null;
       }
+
+      const finalPayer = (!payer || isNoise(payer)) ? (options?.extractedPayer || "CBE Customer") : this.cleanString(payer);
+      const finalReceiver = (!receiver || isNoise(receiver)) ? (options?.extractedReceiver || options?.expectedReceiver || "Merchant") : this.cleanString(receiver);
 
       return {
         verified: true,
         bank: this.bankCode,
         transaction_id: transactionId || reference,
-        payer: this.cleanString(payer) || "CBE Customer",
-        receiver: this.cleanString(receiver) || options?.expectedReceiver || "Merchant",
-        amount: parsedAmount > 0 ? parsedAmount.toFixed(2) : amountStr || "0.00",
+        payer: finalPayer,
+        receiver: finalReceiver,
+        amount: parsedAmount > 0 ? parsedAmount.toFixed(2) : (options?.extractedAmount ? options.extractedAmount.toFixed(2) : "0.00"),
         currency: "ETB",
         date: dateStr || new Date().toISOString(),
         reference: reference,

@@ -83,6 +83,7 @@ export class BOAProvider extends BaseReceiptProvider {
 
       // 2. HTML Slip fallback parsing
       const $ = cheerio.load(content);
+      $("script, style, noscript, svg, head, iframe, link, meta").remove();
       const fullText = $.text().replace(/\s+/g, " ");
 
       if (fullText.toLowerCase().includes("not found") || fullText.toLowerCase().includes("invalid")) {
