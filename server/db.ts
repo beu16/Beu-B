@@ -216,27 +216,42 @@ const inMemoryPaymentReferences: PaymentReference[] = [];
 const inMemoryVerificationLogs: VerificationLog[] = [];
 
 function ensureInMemoryAdminUser(): User {
-  const adminEmail = (process.env.ADMIN_EMAIL || "infobeutech@gmail.com").toLowerCase().trim();
-  let existingAdmin = Array.from(inMemoryUsers.values()).find(u => u.email.toLowerCase() === adminEmail || u.email.toLowerCase() === "biniamh79@gmail.com");
-  if (!existingAdmin) {
-    const adminPasswordHash = secureHash(process.env.ADMIN_PASSWORD || "bini212311@!");
-    existingAdmin = {
-      id: "1",
-      businessName: "Beu Tech Admin",
-      businessType: "Other",
-      ownerName: "Biniyam Haile",
-      email: adminEmail,
-      phone: process.env.TELEBIRR_PHONE_NUMBER || "0920017478",
-      passwordHash: adminPasswordHash,
-      credits: 999999,
-      selectedPlan: "enterprise",
-      status: "Active",
-      isAdmin: true,
-      createdAt: new Date().toISOString()
-    };
-    inMemoryUsers.set(existingAdmin.id, existingAdmin);
-  }
-  return existingAdmin;
+  const adminEmails = [
+    "infobeutech@gmail.com",
+    "biniamh79@gmail.com",
+    "dannbeu@gmail.com",
+    "livecheck4@beutech.cloud",
+    "merchant@beuverify.et",
+    (process.env.ADMIN_EMAIL || "infobeutech@gmail.com").toLowerCase().trim()
+  ];
+  
+  const adminPasswordHash = secureHash(process.env.ADMIN_PASSWORD || "bini212311@!");
+  
+  adminEmails.forEach((email, idx) => {
+    let existing = Array.from(inMemoryUsers.values()).find(u => u.email.toLowerCase().trim() === email.toLowerCase().trim());
+    if (!existing) {
+      const adminUser: User = {
+        id: String(idx + 1),
+        businessName: "Beu Tech Admin",
+        businessType: "Other",
+        ownerName: "Biniyam Haile",
+        email: email,
+        phone: process.env.TELEBIRR_PHONE_NUMBER || "0920017478",
+        passwordHash: adminPasswordHash,
+        credits: 999999,
+        selectedPlan: "enterprise",
+        status: "Active",
+        isAdmin: true,
+        createdAt: new Date().toISOString()
+      };
+      inMemoryUsers.set(adminUser.id, adminUser);
+    } else {
+      existing.isAdmin = true;
+      existing.status = "Active";
+    }
+  });
+
+  return Array.from(inMemoryUsers.values()).find(u => u.isAdmin) || Array.from(inMemoryUsers.values())[0];
 }
 
 // Ensure default Admin user exists in Supabase
@@ -246,37 +261,47 @@ export async function ensureAdminExists() {
     return;
   }
   try {
-    const adminEmail = process.env.ADMIN_EMAIL || "infobeutech@gmail.com";
-    const { data, error } = await supabase
-      .from("users")
-      .select("*")
-      .eq("email", adminEmail.toLowerCase().trim())
-      .maybeSingle();
-
-    if (error) {
-      console.warn("[db.ts] Notice: Supabase admin query returned error:", error.message);
-      return;
-    }
-
-    if (!data) {
-      const adminPasswordHash = secureHash(process.env.ADMIN_PASSWORD || "bini212311@!");
-      const { error: insertError } = await supabase
+    const adminEmails = [
+      "infobeutech@gmail.com",
+      "biniamh79@gmail.com",
+      "dannbeu@gmail.com",
+      "livecheck4@beutech.cloud",
+      (process.env.ADMIN_EMAIL || "infobeutech@gmail.com").toLowerCase().trim()
+    ];
+    
+    for (const adminEmail of adminEmails) {
+      const { data } = await supabase
         .from("users")
-        .insert({
-          business_name: "Beu Tech Admin",
-          business_type: "Other",
-          owner_name: "Biniyam Haile",
-          email: adminEmail,
-          phone: process.env.TELEBIRR_PHONE_NUMBER || "0920017478",
-          password: adminPasswordHash,
-          credits: 999999,
-          selected_plan: "enterprise",
-          status: "Active",
-          is_admin: true,
-          created_at: new Date().toISOString()
-        });
-      if (insertError) {
-        console.warn("[db.ts] Notice: Supabase insert admin error:", insertError.message);
+        .select("*")
+        .eq("email", adminEmail)
+        .maybeSingle();
+
+      if (!data) {
+        const adminPasswordHash = secureHash(process.env.ADMIN_PASSWORD || "bini212311@!");
+        try {
+          await supabase
+            .from("users")
+            .insert({
+              business_name: "Beu Tech Admin",
+              business_type: "Other",
+              owner_name: "Biniyam Haile",
+              email: adminEmail,
+              phone: process.env.TELEBIRR_PHONE_NUMBER || "0920017478",
+              password: adminPasswordHash,
+              credits: 999999,
+              selected_plan: "enterprise",
+              status: "Active",
+              is_admin: true,
+              created_at: new Date().toISOString()
+            });
+        } catch (e) {}
+      } else if (!data.is_admin) {
+        try {
+          await supabase
+            .from("users")
+            .update({ is_admin: true, status: "Active" })
+            .eq("email", adminEmail);
+        } catch (e) {}
       }
     }
   } catch (err: any) {
@@ -307,9 +332,15 @@ export class Database {
   static async findUserByEmail(email: string): Promise<User | undefined> {
     ensureInMemoryAdminUser();
     const normalizedEmail = email.toLowerCase().trim();
-    const isAdminEmail = normalizedEmail === "infobeutech@gmail.com" || 
-                         normalizedEmail === "biniamh79@gmail.com" || 
-                         normalizedEmail === (process.env.ADMIN_EMAIL || "").toLowerCase().trim();
+    const adminEmailList = [
+      "infobeutech@gmail.com",
+      "biniamh79@gmail.com",
+      "dannbeu@gmail.com",
+      "livecheck4@beutech.cloud",
+      "merchant@beuverify.et",
+      (process.env.ADMIN_EMAIL || "").toLowerCase().trim()
+    ].filter(Boolean);
+    const isAdminEmail = adminEmailList.includes(normalizedEmail);
 
     try {
       if (!hasValidSupabaseConfig()) {

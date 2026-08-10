@@ -35,4 +35,8 @@ export interface ProviderOptions {
   expectedAmount?: number;
   expectedReceiver?: string;
   timeoutMs?: number;
+  extractedPayer?: string;
+  extractedReceiver?: string;
+  extractedAmount?: number;
+  extractedDate?: string;
 }

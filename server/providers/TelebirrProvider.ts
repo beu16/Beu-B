@@ -73,7 +73,7 @@ export class TelebirrProvider extends BaseReceiptProvider {
       let dateStr = "";
 
       // 1. Direct Regex extractions from full text
-      const idMatch = fullText.match(/(?:receipt no|transaction no|ref)[:\s]*(\d{9,12})/i) || fullText.match(/\b\d{9,12}\b/) || url.match(/\/receipt\/([a-zA-Z0-9]+)/);
+      const idMatch = fullText.match(/(?:receipt no|transaction no|ref)[:\s]*([a-zA-Z0-9]{8,15})/i) || fullText.match(/\b(?:DH|RFT|CL|TB)[0-9A-Z]{6,12}\b/i) || fullText.match(/\b\d{9,12}\b/) || url.match(/\/receipt\/([a-zA-Z0-9]+)/);
       if (idMatch) transactionId = idMatch[1] || idMatch[0];
 
       const amtMatch = fullText.match(/(?:transferred amount|amount|etb)[:\s]*([0-9,]+\.?[0-9]*)/i) || fullText.match(/([0-9,]+\.[0-9]{2})\s*ETB/i);

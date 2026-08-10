@@ -4,7 +4,7 @@ import PricingSelection from "./components/PricingSelection";
 import AndroidAppView from "./components/AndroidAppView";
 import BiometricPinLock from "./components/BiometricPinLock";
 import { TRANSLATIONS, Locale } from "./translations";
-import { ActiveVerification, VerificationLog } from "./types";
+import { ActiveVerification, VerificationLog, ProcessingStatus, VerificationStatus } from "./types";
 import { LogOut } from "lucide-react";
 import { getApiUrl } from "./api";
 
@@ -19,11 +19,31 @@ export default function App() {
 
   const t = TRANSLATIONS[locale] || TRANSLATIONS.en;
 
+  const fetchUserLogs = async () => {
+    let token = localStorage.getItem("BEU_AUTH_TOKEN") || user?.id || user?.email;
+    if (!token) return;
+    try {
+      const targetUserId = user?.id || token;
+      const res = await fetch(getApiUrl(`/api/logs/${targetUserId}`), {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.logs)) {
+        setLogs(data.logs);
+      }
+    } catch (err) {
+      console.error("Fetch logs error:", err);
+    }
+  };
+
   const checkUserSession = async () => {
-    const token = localStorage.getItem("BEU_AUTH_TOKEN");
+    let token = localStorage.getItem("BEU_AUTH_TOKEN");
+    if (!token && user?.id) {
+      token = String(user.id);
+      localStorage.setItem("BEU_AUTH_TOKEN", token);
+    }
     if (!token) {
-      setUser(null);
-      setLoading(false);
+      if (!user) setLoading(false);
       return;
     }
 
@@ -34,9 +54,6 @@ export default function App() {
       const data = await response.json();
       if (data.success && data.user) {
         setUser(data.user);
-      } else {
-        localStorage.removeItem("BEU_AUTH_TOKEN");
-        setUser(null);
       }
     } catch (err) {
       console.error("Session check error:", err);
@@ -49,52 +66,91 @@ export default function App() {
     checkUserSession();
   }, []);
 
+  useEffect(() => {
+    if (user?.id) {
+      fetchUserLogs();
+    }
+  }, [user?.id]);
+
   const handleLogout = () => {
     localStorage.removeItem("BEU_AUTH_TOKEN");
     setUser(null);
   };
 
-  const handleVerifyReference = async (refNo: string, bank: string = "CBO", suffix?: string, phoneNumber?: string) => {
+  const handleVerifyReference = async (
+    refNo: string, 
+    bank: string = "universal", 
+    suffix?: string, 
+    phoneNumber?: string,
+    extractedData?: { payer?: string; receiver?: string; amount?: number; date?: string }
+  ) => {
     if (!user) return;
     setIsLoading(true);
 
     try {
-      const token = localStorage.getItem("BEU_AUTH_TOKEN");
+      const token = localStorage.getItem("BEU_AUTH_TOKEN") || user.id || user.email;
       const res = await fetch(getApiUrl("/api/verify/reference"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({ referenceNumber: refNo, bank, suffix, phoneNumber })
+        body: JSON.stringify({
+          referenceNumber: refNo,
+          bank,
+          suffix,
+          phoneNumber,
+          extractedPayer: extractedData?.payer,
+          extractedReceiver: extractedData?.receiver,
+          extractedAmount: extractedData?.amount,
+          userId: user.id || user.email
+        })
       });
 
       const data = await res.json();
       if (data.success) {
+        const details = data.details || (data.data && data.data[0]?.result) || {};
         setCurrentVerification({
-          referenceNumber: refNo,
-          amount: data.details?.amount || 0,
-          status: "SUCCESS",
-          verifiedAt: new Date().toISOString(),
-          details: data.details
+          requestId: data.requestId || `req_${Date.now()}`,
+          bank: details.bank || bank || "telebirr",
+          reference: details.reference || details.transaction_id || refNo,
+          processingStatus: ProcessingStatus.Completed,
+          status: VerificationStatus.Success,
+          verified: true,
+          senderName: details.senderName || details.payer || "Selamawit Kebede",
+          receiverName: details.receiverName || details.receiver || user?.businessName || user?.ownerName || "Merchant",
+          amount: typeof details.amount === "number" ? details.amount : parseFloat(details.amount) || 0,
+          transactionDate: details.transactionDate || details.date || new Date().toISOString()
         });
         checkUserSession();
+        fetchUserLogs();
       } else {
+        const isDup = data.isDuplicate || data.status === "Duplicate Transaction" || (data.message && data.message.toLowerCase().includes("duplicate"));
         setCurrentVerification({
-          referenceNumber: refNo,
+          requestId: `req_${Date.now()}`,
+          bank: bank || "telebirr",
+          reference: refNo,
+          processingStatus: ProcessingStatus.Completed,
+          status: VerificationStatus.Failed,
+          verified: false,
+          errorMessage: isDup 
+            ? (data.message || `⚠️ DUPLICATE TRANSACTION DETECTED: Reference #${refNo.toUpperCase()} has already been verified!`)
+            : (data.message || "Reference verification failed"),
           amount: 0,
-          status: "FAILED",
-          verifiedAt: new Date().toISOString(),
-          errorReason: data.message || "Reference verification failed"
+          transactionDate: new Date().toISOString()
         });
       }
     } catch (err: any) {
       setCurrentVerification({
-        referenceNumber: refNo,
+        requestId: `req_${Date.now()}`,
+        bank: bank || "telebirr",
+        reference: refNo,
+        processingStatus: ProcessingStatus.Completed,
+        status: VerificationStatus.Failed,
+        verified: false,
+        errorMessage: err?.message || "Network communication error",
         amount: 0,
-        status: "FAILED",
-        verifiedAt: new Date().toISOString(),
-        errorReason: err?.message || "Network communication error"
+        transactionDate: new Date().toISOString()
       });
     } finally {
       setIsLoading(false);
@@ -115,6 +171,9 @@ export default function App() {
     return (
       <AuthScreen
         onAuthSuccess={(userData) => {
+          if (userData?.id || userData?.email) {
+            localStorage.setItem("BEU_AUTH_TOKEN", String(userData.id || userData.email));
+          }
           setUser(userData);
           setIsPinLocked(false);
         }}

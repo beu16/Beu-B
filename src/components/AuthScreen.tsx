@@ -116,6 +116,10 @@ export default function AuthScreen({ onAuthSuccess, locale, t }: AuthScreenProps
 
       if (data.success) {
         setSuccess(locale === "am" ? "በተሳካ ሁኔታ ገብተዋል!" : "Signed in successfully! Loading your workspace...");
+        const token = data.token || data.user?.id || data.user?.email;
+        if (token) {
+          localStorage.setItem("BEU_AUTH_TOKEN", String(token));
+        }
         setTimeout(() => {
           onAuthSuccess(data.user);
         }, 800);

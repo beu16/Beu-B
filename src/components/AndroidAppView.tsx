@@ -59,7 +59,7 @@ interface AndroidAppViewProps {
   locale: Locale;
   onLanguageChange: (lang: Locale) => void;
   logs?: VerificationLog[];
-  onVerifyReference?: (ref: string, bank: string, suffix?: string, phoneNumber?: string) => void;
+  onVerifyReference?: (ref: string, bank: string, suffix?: string, phoneNumber?: string, extractedData?: { payer?: string; receiver?: string; amount?: number; date?: string }) => void;
   currentVerification: ActiveVerification | null;
   setCurrentVerification: (v: ActiveVerification | null) => void;
   isLoadingVerification?: boolean;
@@ -99,14 +99,16 @@ export default function AndroidAppView({
   const [darkMode, setDarkMode] = useState(true);
   const [pushNotifications, setPushNotifications] = useState(true);
   const [emailAlerts, setEmailAlerts] = useState(true);
-  const [biometricLock, setBiometricLock] = useState(true);
+  const [pinLockEnabled, setPinLockEnabled] = useState(() => {
+    return localStorage.getItem("beu_verify_security_pin_enabled") === "true";
+  });
   
   // Search history state
   const [historySearch, setHistorySearch] = useState("");
   const [historyFilter, setHistoryFilter] = useState<"all" | "today" | "yesterday">("all");
 
-  // Biometric & PIN Lock Modal State - Starts locked on app open every time
-  const [showSecurityModal, setShowSecurityModal] = useState(true);
+  // Security PIN Modal State - Default false to avoid duplicate prompts on startup
+  const [showSecurityModal, setShowSecurityModal] = useState(false);
   const [securityModalMode, setSecurityModalMode] = useState<"unlock" | "setup">("unlock");
   const [sendingBrevoReceipt, setSendingBrevoReceipt] = useState(false);
 
@@ -168,16 +170,10 @@ export default function AndroidAppView({
     .slice(0, 5);
 
   // Helper triggers for scan modes
-  const [scanTabMode, setScanTabMode] = useState<"camera" | "upload" | "manual">("camera");
+  const [scanTabMode, setScanTabMode] = useState<"camera" | "manual">("camera");
 
   const handleOpenScanCamera = () => {
     setScanTabMode("camera");
-    setActiveTab("scan");
-    setSubScreen("none");
-  };
-
-  const handleOpenScanUpload = () => {
-    setScanTabMode("upload");
     setActiveTab("scan");
     setSubScreen("none");
   };
@@ -189,7 +185,7 @@ export default function AndroidAppView({
   };
 
   const handleOpenScan = () => {
-    handleOpenManual();
+    handleOpenScanCamera();
   };
 
   // Switch tab & clear subscreen
@@ -598,7 +594,7 @@ export default function AndroidAppView({
 
                 {/* Security */}
                 <div className="space-y-2">
-                  <h4 className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Security & Biometrics</h4>
+                  <h4 className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Security & Passcode</h4>
                   <div className="bg-zinc-900/90 border border-zinc-800 rounded-xl divide-y divide-zinc-800/60">
                     <div 
                       onClick={() => { setSecurityModalMode("unlock"); setShowSecurityModal(true); }}
@@ -622,16 +618,16 @@ export default function AndroidAppView({
                     </div>
                     <div className="p-3 flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <Fingerprint size={15} className="text-amber-400" />
-                        <span>Biometric Lock (Fingerprint)</span>
+                        <Lock size={15} className="text-amber-400" />
+                        <span>4-Digit Security PIN</span>
                       </div>
                       <input 
                         type="checkbox" 
-                        checked={biometricLock} 
+                        checked={pinLockEnabled} 
                         onChange={e => {
                           const val = e.target.checked;
-                          setBiometricLock(val);
-                          localStorage.setItem("beu_verify_biometrics_enabled", val ? "true" : "false");
+                          setPinLockEnabled(val);
+                          localStorage.setItem("beu_verify_security_pin_enabled", val ? "true" : "false");
                           if (val) {
                             setSecurityModalMode("setup");
                             setShowSecurityModal(true);
@@ -901,29 +897,21 @@ export default function AndroidAppView({
               </div>
 
               {/* Action Buttons Row */}
-              <div className="grid grid-cols-3 gap-1.5 relative z-10">
+              <div className="grid grid-cols-2 gap-2 relative z-10">
                 <button
                   onClick={handleOpenScanCamera}
-                  className="py-2.5 px-1.5 bg-[#FFD700] hover:bg-amber-300 text-black font-extrabold text-[10px] rounded-lg shadow-[0_0_15px_rgba(255,215,0,0.3)] flex items-center justify-center gap-1 transition-all cursor-pointer active:scale-95 truncate"
+                  className="py-2.5 px-3 bg-[#FFD700] hover:bg-amber-300 text-black font-extrabold text-[11px] rounded-lg shadow-[0_0_15px_rgba(255,215,0,0.3)] flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-95 truncate"
                 >
-                  <Camera size={13} className="text-black shrink-0" />
-                  <span className="truncate">Scan Receipt</span>
-                </button>
-
-                <button
-                  onClick={handleOpenScanUpload}
-                  className="py-2.5 px-1.5 bg-[#18181C] hover:bg-zinc-800 border border-zinc-700/80 text-white font-bold text-[10px] rounded-lg flex items-center justify-center gap-1 transition-all cursor-pointer active:scale-95 truncate"
-                >
-                  <Upload size={13} className="text-zinc-300 shrink-0" />
-                  <span className="truncate">Upload QR</span>
+                  <Camera size={14} className="text-black shrink-0" />
+                  <span className="truncate">Scan QR Receipt</span>
                 </button>
 
                 <button
                   onClick={handleOpenManual}
-                  className="py-2.5 px-1.5 bg-[#18181C] hover:bg-zinc-800 border border-amber-400/40 text-amber-300 font-bold text-[10px] rounded-lg flex items-center justify-center gap-1 transition-all cursor-pointer active:scale-95 truncate"
+                  className="py-2.5 px-3 bg-[#18181C] hover:bg-zinc-800 border border-amber-400/40 text-amber-300 font-bold text-[11px] rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-95 truncate"
                 >
-                  <Zap size={13} className="text-[#FFD700] fill-[#FFD700] shrink-0" />
-                  <span className="truncate">Manual</span>
+                  <Zap size={14} className="text-[#FFD700] fill-[#FFD700] shrink-0" />
+                  <span className="truncate">Manual Entry</span>
                 </button>
               </div>
             </div>
@@ -1108,7 +1096,7 @@ export default function AndroidAppView({
                 </span>
               </button>
               
-              {/* 3-Way Mode Switcher Pill */}
+              {/* 2-Way Mode Switcher Pill */}
               <div className="flex bg-[#121215] border border-zinc-800 rounded-lg p-0.5 text-[10px] font-bold">
                 <button
                   onClick={() => setScanTabMode("manual")}
@@ -1128,15 +1116,6 @@ export default function AndroidAppView({
                   <Camera size={11} />
                   <span>Camera</span>
                 </button>
-                <button
-                  onClick={() => setScanTabMode("upload")}
-                  className={`px-2 py-1 rounded-md flex items-center gap-1 transition-all ${
-                    scanTabMode === "upload" ? "bg-[#FFD700] text-black font-extrabold" : "text-zinc-400 hover:text-white"
-                  }`}
-                >
-                  <Upload size={11} />
-                  <span>Upload</span>
-                </button>
               </div>
             </div>
 
@@ -1145,7 +1124,7 @@ export default function AndroidAppView({
               <div className="flex-1 overflow-y-auto pt-1">
                 <ManualForm 
                   onVerify={(data) => {
-                    if (onVerifyReference) onVerifyReference(data.reference, data.bank);
+                    if (onVerifyReference) onVerifyReference(data.reference, data.bank, data.suffix, data.phoneNumber);
                   }}
                   onSwitchToScan={() => setScanTabMode("camera")}
                   isLoading={isLoadingVerification}
@@ -1157,9 +1136,9 @@ export default function AndroidAppView({
               <div className="flex-1 flex flex-col gap-3">
                 <div className="flex-1 rounded-2xl overflow-hidden border border-amber-400/30 relative">
                   <QrScanner 
-                    initialTab={scanTabMode}
-                    onScanSuccess={(ref, bank) => {
-                      if (onVerifyReference) onVerifyReference(ref, bank);
+                    initialTab="camera"
+                    onScanSuccess={(ref, bank, extractedDetails) => {
+                      if (onVerifyReference) onVerifyReference(ref, bank, undefined, undefined, extractedDetails);
                     }}
                     onScanError={(err) => alert(err)}
                     themeConfig={THEMES.gold}
@@ -1770,7 +1749,7 @@ export default function AndroidAppView({
                     className="w-full p-2.5 rounded-xl flex items-center gap-3 text-xs font-bold text-amber-500 hover:bg-amber-400/10 transition-all cursor-pointer"
                   >
                     <Lock size={16} />
-                    <span>Lock App (Biometric/PIN)</span>
+                    <span>Lock App (Security PIN)</span>
                   </button>
                 </div>
 

@@ -1,15 +1,15 @@
 import React, { useState, useRef, useEffect } from "react";
 import jsQR from "jsqr";
-import { Camera, Upload, AlertCircle, RefreshCw, CheckCircle2, FileImage, Landmark } from "lucide-react";
+import { Camera, AlertCircle, RefreshCw, CheckCircle2, Landmark } from "lucide-react";
 import { motion } from "motion/react";
 import { ThemeConfig } from "../themes";
 
 interface QrScannerProps {
-  onScanSuccess: (decodedText: string, bank: string) => void;
+  onScanSuccess: (decodedText: string, bank: string, extractedDetails?: { payer?: string; receiver?: string; amount?: number; date?: string }) => void;
   onScanError: (error: string) => void;
   themeConfig: ThemeConfig;
   t: any;
-  initialTab?: "camera" | "upload";
+  initialTab?: "camera";
 }
 
 const SUPPORTED_BANKS = [
@@ -25,23 +25,16 @@ const SUPPORTED_BANKS = [
   { id: "siinqee", name: "Siinqee Bank" }
 ];
 
-function QrScanner({ onScanSuccess, onScanError, themeConfig, t, initialTab = "upload" }: QrScannerProps) {
-  const [activeTab, setActiveTab] = useState<"upload" | "camera">(initialTab);
+function QrScanner({ onScanSuccess, onScanError, themeConfig, t }: QrScannerProps) {
+  const [activeTab, setActiveTab] = useState<"camera">("camera");
 
-  useEffect(() => {
-    if (initialTab) {
-      setActiveTab(initialTab);
-    }
-  }, [initialTab]);
   const [selectedBank, setSelectedBank] = useState("universal");
-  const [dragActive, setDragActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [scanResult, setScanResult] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const animationFrameIdRef = useRef<number | null>(null);
 
@@ -62,13 +55,9 @@ function QrScanner({ onScanSuccess, onScanError, themeConfig, t, initialTab = "u
   };
 
   useEffect(() => {
-    if (activeTab !== "camera") {
-      stopCamera();
-    } else {
-      startCamera();
-    }
+    startCamera();
     return () => stopCamera();
-  }, [activeTab, selectedDeviceId]);
+  }, [selectedDeviceId]);
 
   const startCamera = async () => {
     setCameraError(null);
@@ -174,8 +163,8 @@ function QrScanner({ onScanSuccess, onScanError, themeConfig, t, initialTab = "u
       const errMsg = err?.message || err?.toString() || "";
       if (errMsg.includes("AndroidManifest") || errMsg.includes("Barcode") || errMsg.includes("permission") || errMsg.includes("installGoogleBarcodeScannerModule") || errMsg.includes("READ_EXTERNAL_STORAGE")) {
         setCameraError("Camera or Barcode module permission is restricted on this mobile build. Please use the 'Upload Image' tab or enter receipt reference manually below.");
-      } else if (err?.name === "NotAllowedError" || err?.name === "PermissionDeniedError") {
-        setCameraError("Camera permission was denied. Please allow camera access in your browser or device app permissions, or click 'Use Image Upload'.");
+      } else if (err?.name === "NotAllowedError" || err?.name === "PermissionDeniedError" || errMsg.toLowerCase().includes("permission denied") || errMsg.toLowerCase().includes("notallowederror")) {
+        setCameraError("Camera permission was denied or restricted by browser iframe policy. Please allow camera access in your browser site settings, or click 'Use Image Upload' below to scan receipt screenshots directly.");
       } else {
         setCameraError(t.cameraAccessDenied || "Camera access is unavailable on this device environment. Please use 'Upload Image' tab or manual reference entry.");
       }
@@ -242,114 +231,23 @@ function QrScanner({ onScanSuccess, onScanError, themeConfig, t, initialTab = "u
     }
   };
 
-  const handleDrag = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === "dragenter" || e.type === "dragover") {
-      setDragActive(true);
-    } else if (e.type === "dragleave") {
-      setDragActive(false);
-    }
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      processFile(e.dataTransfer.files[0]);
-    }
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      processFile(e.target.files[0]);
-    }
-  };
-
-  const processFile = (file: File) => {
-    setScanResult(null);
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
-
-        // Draw image onto canvas to get binary data
-        canvas.width = img.width;
-        canvas.height = img.height;
-        ctx.drawImage(img, 0, 0);
-
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const code = jsQR(imageData.data, imageData.width, imageData.height);
-
-        if (code && code.data) {
-          setScanResult(code.data);
-          onScanSuccess(code.data, selectedBank);
-        } else {
-          // Smart receipt image processing fallback
-          // Extract reference from filename or construct verified receipt reference
-          const cleanFileName = file.name.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
-          const extractedRef = cleanFileName.length > 6 
-            ? cleanFileName.slice(0, 10) 
-            : `REC${Math.floor(100000 + Math.random() * 900000)}`;
-          
-          setScanResult(extractedRef);
-          onScanSuccess(extractedRef, selectedBank);
-        }
-      };
-      img.src = event.target?.result as string;
-    };
-    reader.readAsDataURL(file);
-  };
-
   return (
     <div id="qr-scanner-card" className={`w-full ${themeConfig.cardBg} border ${themeConfig.border} rounded-xl overflow-hidden ${themeConfig.glowShadow}`}>
-      {/* Tab Navigation */}
-      <div className="flex border-b border-zinc-900/40 bg-black/30">
-        <button
-          id="tab-upload-btn"
-          onClick={() => setActiveTab("upload")}
-          className={`flex-1 py-4 flex flex-col sm:flex-row items-center justify-center gap-1.5 font-bold text-[10px] sm:text-xs tracking-wider uppercase transition-all duration-300 ${
-            activeTab === "upload"
-              ? `${themeConfig.cardBg} ${themeConfig.accentText} border-b-2 ${
-                  themeConfig.id === "gold" ? "border-[#D4AF37]" :
-                  themeConfig.id === "slate" ? "border-blue-500" :
-                  themeConfig.id === "forest" ? "border-[#10B981]" : "border-orange-500"
-                }`
-              : "text-zinc-500 hover:text-zinc-300"
-          }`}
-        >
-          <div className="flex items-center gap-1.5">
-            <Upload size={14} className={themeConfig.accentMuted} />
-            <span>{t.uploadTab}</span>
-          </div>
-        </button>
-        <button
-          id="tab-camera-btn"
-          onClick={() => setActiveTab("camera")}
-          className={`flex-1 py-4 flex flex-col sm:flex-row items-center justify-center gap-1.5 font-bold text-[10px] sm:text-xs tracking-wider uppercase transition-all duration-300 ${
-            activeTab === "camera"
-              ? `${themeConfig.cardBg} ${themeConfig.accentText} border-b-2 ${
-                  themeConfig.id === "gold" ? "border-[#D4AF37]" :
-                  themeConfig.id === "slate" ? "border-blue-500" :
-                  themeConfig.id === "forest" ? "border-[#10B981]" : "border-orange-500"
-                }`
-              : "text-zinc-500 hover:text-zinc-300"
-          }`}
-        >
-          <div className="flex items-center gap-1.5">
-            <Camera size={14} className={themeConfig.accentMuted} />
-            <span>{t.liveScanTab}</span>
-          </div>
-        </button>
+      {/* Header */}
+      <div className="flex border-b border-zinc-900/40 bg-black/30 p-3.5 items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Camera size={16} className={themeConfig.accentMuted} />
+          <span className="font-extrabold text-xs tracking-wider uppercase text-zinc-200">
+            {t.liveScanTab || "Live Camera QR Scanner"}
+          </span>
+        </div>
+        <span className="text-[10px] font-bold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-full border border-amber-400/30">
+          Live Scanner
+        </span>
       </div>
 
-      <div className="p-6 flex flex-col gap-5">
-        {/* Select Bank / Wallet Dropdown for QR Scanning / Upload */}
+      <div className="p-4 sm:p-6 flex flex-col gap-4">
+        {/* Select Bank / Wallet Dropdown for QR Scanning */}
         <div className="flex flex-col gap-1.5 bg-black/25 p-3.5 rounded-xl border border-zinc-900">
           <label htmlFor="scan-bank-select" className="text-zinc-400 text-[10px] font-extrabold tracking-widest uppercase flex items-center gap-1.5">
             <Landmark size={12} className={themeConfig.accentMuted} />
@@ -368,77 +266,25 @@ function QrScanner({ onScanSuccess, onScanError, themeConfig, t, initialTab = "u
             ))}
           </select>
           <p className="text-[9px] text-zinc-500 leading-normal">
-            * Select the bank/wallet of the receipt you are uploading or scanning so we can match it accurately.
+            * Select the bank/wallet of the receipt so we can match it accurately.
           </p>
         </div>
 
-        {/* Upload File Tab */}
-        {activeTab === "upload" && (
-          <div
-            id="drag-drop-zone"
-            onDragEnter={handleDrag}
-            onDragOver={handleDrag}
-            onDragLeave={handleDrag}
-            onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
-            className={`relative flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-10 cursor-pointer transition-all duration-300 ${
-              dragActive
-                ? themeConfig.id === "gold" ? "border-[#FFD700] bg-[#D4AF37]/5 scale-[1.01]" :
-                  themeConfig.id === "slate" ? "border-blue-500 bg-blue-500/5 scale-[1.01]" :
-                  themeConfig.id === "forest" ? "border-[#34D399] bg-[#10B981]/5 scale-[1.01]" :
-                  "border-orange-500 bg-orange-500/5 scale-[1.01]"
-                : `border-zinc-800 hover:${themeConfig.borderHighlight} hover:${themeConfig.subCardBg}`
-            }`}
-          >
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              accept="image/*"
-              className="hidden"
-            />
-            
-            <div className={`p-4 ${themeConfig.glowIconBg} rounded-full mb-4`}>
-              <FileImage size={28} />
+        {/* Live Camera Scan */}
+        <div className="relative flex flex-col items-center justify-center bg-black rounded-lg border border-zinc-900 overflow-hidden min-h-[280px]">
+          {cameraError ? (
+            <div id="camera-error-view" className="flex flex-col items-center p-6 text-center">
+              <AlertCircle className="text-rose-500 mb-3" size={36} />
+              <h4 className="text-zinc-200 font-bold text-xs uppercase tracking-wider mb-2">{t.cameraBlockedTitle}</h4>
+              <p className="text-zinc-400 text-[11px] max-w-md mb-5 leading-relaxed">{cameraError}</p>
+              <button
+                onClick={startCamera}
+                className="flex items-center justify-center gap-2 px-5 py-2.5 bg-amber-400 text-black font-extrabold text-[11px] uppercase tracking-wider rounded-lg transition-all shadow-md active:scale-95 cursor-pointer"
+              >
+                <RefreshCw size={12} /> {t.retryAccessBtn || "Retry Camera Access"}
+              </button>
             </div>
-            
-            <h3 className="text-zinc-200 font-bold text-xs sm:text-sm tracking-wide mb-1 text-center font-display leading-snug">
-              {t.dragDropTitle}
-            </h3>
-            <p className="text-zinc-500 text-[10px] sm:text-[11px] text-center mb-5 max-w-sm leading-relaxed">
-              {t.dragDropFormats}
-            </p>
-            
-            <span className={`px-5 py-2.5 ${themeConfig.btnPrimary} font-bold text-xs rounded tracking-wider uppercase transition-all duration-300`}>
-              {t.browseBtn}
-            </span>
-          </div>
-        )}
-
-        {/* Live Camera Scan Tab */}
-        {activeTab === "camera" && (
-          <div className="relative flex flex-col items-center justify-center bg-black rounded-lg border border-zinc-900 overflow-hidden min-h-[300px]">
-            {cameraError ? (
-              <div id="camera-error-view" className="flex flex-col items-center p-6 text-center">
-                <AlertCircle className="text-rose-500 mb-3" size={36} />
-                <h4 className="text-zinc-200 font-bold text-xs uppercase tracking-wider mb-2">{t.cameraBlockedTitle}</h4>
-                <p className="text-zinc-400 text-[11px] max-w-md mb-5 leading-relaxed">{cameraError}</p>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <button
-                    onClick={startCamera}
-                    className="flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-400 text-black font-extrabold text-[11px] uppercase tracking-wider rounded-lg transition-all shadow-md active:scale-95 cursor-pointer"
-                  >
-                    <RefreshCw size={12} /> {t.retryAccessBtn || "Retry Camera Access"}
-                  </button>
-                  <button
-                    onClick={() => setActiveTab("upload")}
-                    className={`flex items-center justify-center gap-2 px-4 py-2.5 ${themeConfig.btnPrimary} text-black font-bold text-[11px] uppercase tracking-wider rounded-lg transition-all cursor-pointer`}
-                  >
-                    {t.useUploadTabBtn || "Use Image Upload"}
-                  </button>
-                </div>
-              </div>
-            ) : (
+          ) : (
               <>
                 <video
                   ref={videoRef}
@@ -500,7 +346,6 @@ function QrScanner({ onScanSuccess, onScanError, themeConfig, t, initialTab = "u
               </>
             )}
           </div>
-        )}
 
         {/* Scan Result Feedback */}
         {scanResult && (

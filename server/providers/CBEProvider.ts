@@ -5,7 +5,7 @@ import { NormalizedReceiptData, ProviderOptions } from "./types.js";
 export class CBEProvider extends BaseReceiptProvider {
   readonly bankName = "Commercial Bank of Ethiopia";
   readonly bankCode = "CBE";
-  readonly supportedDomains = ["apps.cbe.com.et", "cbe.com.et", "mbreciept.cbe.com.et"];
+  readonly supportedDomains = ["apps.cbe.com.et", "cbe.com.et", "mbreciept.cbe.com.et", "cbepay.cbe.com.et", "mreceipt.cbe.com.et"];
 
   canHandle(input: string, options?: ProviderOptions): boolean {
     if (!input) return false;
@@ -14,13 +14,13 @@ export class CBEProvider extends BaseReceiptProvider {
     // Check domain match
     if (this.supportedDomains.some(d => clean.includes(d))) return true;
 
-    // Check FT reference format (e.g., FT24012A3B94)
-    if (/^FT[A-Z0-9]{5,14}$/i.test(clean) || clean.includes("ft") && /\bFT[A-Z0-9]{5,14}\b/i.test(clean)) {
+    // Check FT reference format (e.g., FT24012A3B94 or FT...)
+    if (/^FT[A-Z0-9]{5,16}$/i.test(clean) || clean.includes("ft") || /\bFT[A-Z0-9]{5,16}\b/i.test(clean)) {
       return true;
     }
 
-    // Explicit bank selection
-    if (options?.accountSuffix && (clean.startsWith("ft") || clean.length >= 8)) {
+    // Explicit bank selection or general CBE references
+    if (clean.includes("cbe") || clean.includes("cbepay") || (options?.accountSuffix && clean.length >= 6)) {
       return true;
     }
 
@@ -36,18 +36,18 @@ export class CBEProvider extends BaseReceiptProvider {
     }
 
     // Extract clean FT number or reference code
-    const ftMatch = clean.match(/\bFT[A-Z0-9]{8,14}\b/i);
-    const reference = ftMatch ? ftMatch[0].toUpperCase() : clean.replace(/[^a-zA-Z0-9]/g, "");
+    const ftMatch = clean.match(/\bFT[A-Z0-9]{8,16}\b/i) || clean.match(/\b[A-Z0-9]{8,16}\b/i);
+    const reference = ftMatch ? ftMatch[0].toUpperCase() : clean.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
 
     // Check if account suffix provided for classic CBE portal
     const suffix = options?.accountSuffix ? options.accountSuffix.trim() : "";
 
-    if (reference.toUpperCase().startsWith("FT")) {
-      return `https://apps.cbe.com.et:100/?id=${reference}${suffix}`;
+    if (reference.startsWith("FT")) {
+      return `https://apps.cbe.com.et/mreceipt/${reference}${suffix ? `?suffix=${suffix}` : ""}`;
     }
 
     // Mobile slip shortcut
-    return `https://mbreciept.cbe.com.et/receipt/${reference}`;
+    return `https://cbepay.cbe.com.et/receipt?id=${reference}`;
   }
 
   parseReceipt(content: string, url: string, options?: ProviderOptions): NormalizedReceiptData | null {
