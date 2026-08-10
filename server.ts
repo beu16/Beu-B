@@ -6,6 +6,7 @@ import crypto from "crypto";
 import { createClient } from "@supabase/supabase-js";
 import { Database, simpleHash, secureHash, User } from "./server/db.js";
 import { registry } from "./server/providers/ReceiptProviderRegistry.js";
+const receiptRegistry = registry;
 
 dotenv.config();
 
@@ -1055,10 +1056,8 @@ app.post("/api/subscription/verify-payment", verifyLimiter, async (req, res) => 
         ownerName: "Demo Merchant",
         email: "merchant@beuverify.et",
         phone: "+251911000000",
-        password: "password123",
-        credits: 50,
-        selectedPlan: "Pro Plan",
-        status: "Active"
+        passwordHash: "password123",
+        selectedPlan: "business"
       });
     }
 
@@ -1478,10 +1477,8 @@ app.post(["/api/verify", "/api/verify/reference"], verifyLimiter, async (req, re
         ownerName: "Demo Merchant",
         email: "merchant@beuverify.et",
         phone: "+251911000000",
-        password: "password123",
-        credits: 50,
-        selectedPlan: "Pro Plan",
-        status: "Active"
+        passwordHash: "password123",
+        selectedPlan: "business"
       });
     }
 
@@ -1495,10 +1492,6 @@ app.post(["/api/verify", "/api/verify/reference"], verifyLimiter, async (req, re
       refLower.includes("sim") ||
       refLower.includes("mock") ||
       refLower.includes("sandbox") ||
-      refLower.includes("v2-") ||
-      refLower.includes("dh96") ||
-      refLower.includes("ft123") ||
-      refLower.includes("ft240") ||
       refLower === "dh96nfhw6s" ||
       refLower === "rft9210984"
     );

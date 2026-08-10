@@ -58,7 +58,7 @@ interface AndroidAppViewProps {
   onLogout: () => void;
   locale: Locale;
   onLanguageChange: (lang: Locale) => void;
-  logs: VerificationLog[];
+  logs?: VerificationLog[];
   onVerifyReference?: (ref: string, bank: string, suffix?: string, phoneNumber?: string) => void;
   currentVerification: ActiveVerification | null;
   setCurrentVerification: (v: ActiveVerification | null) => void;
@@ -74,7 +74,7 @@ export default function AndroidAppView({
   onLogout,
   locale,
   onLanguageChange,
-  logs,
+  logs = [],
   onVerifyReference,
   currentVerification,
   setCurrentVerification,
@@ -141,19 +141,19 @@ export default function AndroidAppView({
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-  const todayLogs = logs.filter(l => new Date(l.timestamp || Date.now()) >= todayStart);
+  const todayLogs = (logs || []).filter(l => new Date(l.timestamp || Date.now()) >= todayStart);
   const todayVolume = todayLogs.reduce((sum, item) => sum + (item.amount || 0), 0);
   const receiptsTodayCount = todayLogs.length;
 
-  const weeklyLogs = logs.filter(l => new Date(l.timestamp || Date.now()) >= sevenDaysAgo);
+  const weeklyLogs = (logs || []).filter(l => new Date(l.timestamp || Date.now()) >= sevenDaysAgo);
   const weeklyVolume = weeklyLogs.reduce((sum, item) => sum + (item.amount || 0), 0);
   const weeklyCount = weeklyLogs.length;
 
-  const totalSavedCount = logs.length;
-  const myEarnings = logs.reduce((sum, item) => sum + (item.amount || 0), 0);
+  const totalSavedCount = (logs || []).length;
+  const myEarnings = (logs || []).reduce((sum, item) => sum + (item.amount || 0), 0);
 
   // Group real logs by merchant / receiver name
-  const merchantMap = logs.reduce((acc: Record<string, { name: string; count: number; totalAmount: number }>, log) => {
+  const merchantMap = (logs || []).reduce((acc: Record<string, { name: string; count: number; totalAmount: number }>, log) => {
     const name = log.receiverName || log.bank?.toUpperCase() || "Merchant";
     if (!acc[name]) {
       acc[name] = { name, count: 0, totalAmount: 0 };
@@ -1022,7 +1022,7 @@ export default function AndroidAppView({
 
             {/* History List from Real Saved Logs */}
             <div className="space-y-4 text-xs">
-              {logs.length === 0 ? (
+              {(logs || []).length === 0 ? (
                 <div className="p-8 text-center bg-zinc-900/60 border border-zinc-800 rounded-2xl space-y-2">
                   <FileText size={32} className="mx-auto text-zinc-600" />
                   <p className="font-bold text-zinc-300 text-sm">Fresh Account Start</p>
@@ -1033,10 +1033,10 @@ export default function AndroidAppView({
               ) : (
                 <div className="space-y-2">
                   <h4 className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
-                    All Saved Verifications ({logs.length})
+                    All Saved Verifications ({(logs || []).length})
                   </h4>
                   <div className="space-y-2">
-                    {logs
+                    {(logs || [])
                       .filter(item => {
                         if (!historySearch.trim()) return true;
                         const query = historySearch.toLowerCase();
@@ -1198,7 +1198,7 @@ export default function AndroidAppView({
                 <p className="text-xs text-zinc-400">Total Verified Volume</p>
                 <div className="flex items-baseline gap-2">
                   <h3 className="text-2xl font-black text-white font-mono">
-                    ETB {logs.reduce((sum, item) => sum + (item.amount || 0), 0).toFixed(2)}
+                    ETB {(logs || []).reduce((sum, item) => sum + (item.amount || 0), 0).toFixed(2)}
                   </h3>
                   <span className="text-xs font-bold text-emerald-400">Realtime Daily Log</span>
                 </div>
@@ -1208,7 +1208,7 @@ export default function AndroidAppView({
               <div className="h-28 w-full pt-3 flex items-end justify-between gap-2 px-1">
                 {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((dayName, dayIndex) => {
                   // Calculate total volume for this day of the week from real logs
-                  const dayLogs = logs.filter(l => {
+                  const dayLogs = (logs || []).filter(l => {
                     const d = new Date(l.timestamp || Date.now());
                     const jsDay = d.getDay(); // 0 is Sun, 1 is Mon...
                     const mappedIdx = jsDay === 0 ? 6 : jsDay - 1;
@@ -1216,7 +1216,7 @@ export default function AndroidAppView({
                   });
                   const dayVolume = dayLogs.reduce((acc, l) => acc + (l.amount || 0), 0);
                   const maxVol = Math.max(...["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((_, idx) => {
-                    return logs.filter(l => {
+                    return (logs || []).filter(l => {
                       const d = new Date(l.timestamp || Date.now());
                       const jsDay = d.getDay();
                       const mappedIdx = jsDay === 0 ? 6 : jsDay - 1;
@@ -1252,7 +1252,7 @@ export default function AndroidAppView({
             <div className="grid grid-cols-2 gap-3">
               <div className="p-3 bg-zinc-900/80 border border-zinc-800 rounded-xl space-y-1">
                 <span className="text-[11px] text-zinc-400">Total Receipts</span>
-                <p className="text-lg font-black text-white font-mono">{logs.length}</p>
+                <p className="text-lg font-black text-white font-mono">{(logs || []).length}</p>
                 <p className="text-[10px] text-emerald-400">Saved</p>
               </div>
 
