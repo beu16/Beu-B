@@ -50,6 +50,93 @@ export class CBEProvider extends BaseReceiptProvider {
     return `https://cbepay.cbe.com.et/receipt?id=${reference}`;
   }
 
+  async fetchCbeDirectApi(idOrToken: string, options?: ProviderOptions): Promise<NormalizedReceiptData | null> {
+    if (!idOrToken) return null;
+    const cleanId = idOrToken.replace(/^https?:\/\/[^\/]+\//i, "").replace(/^\//, "").trim();
+
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 4000);
+
+      const url = `https://Mb.cbe.com.et/api/v1/transactions/public/transaction-detail/${cleanId}`;
+      const res = await fetch(url, {
+        method: "GET",
+        headers: {
+          "X-App-ID": "d1292e42-7400-49de-a2d3-9731caa4c819",
+          "X-App-Version": "0a01980b-9859-1369-8198-59f403820000",
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+          "Accept": "application/json, text/plain, */*"
+        },
+        signal: controller.signal
+      }).finally(() => clearTimeout(timer));
+
+      if (!res.ok) return null;
+
+      const data: any = await res.json().catch(() => null);
+      if (!data || !data.id) return null;
+
+      const payer = this.cleanString(data.debitAccountHolder) || options?.extractedPayer || "CBE Customer";
+      const receiver = this.cleanString(data.creditAccountHolder) || options?.extractedReceiver || options?.expectedReceiver || "Merchant";
+      const amtNum = this.parseAmountNumber(data.amountDebited || data.amountCredited || data.debitAmount || data.amountDebitedWithCurrency || 0);
+      const dateVal = (Array.isArray(data.dateTimes) && data.dateTimes[0]) ? data.dateTimes[0] : (data.authDate || new Date().toISOString());
+
+      return {
+        verified: true,
+        bank: this.bankCode,
+        transaction_id: data.id,
+        payer,
+        receiver,
+        amount: amtNum > 0 ? amtNum.toFixed(2) : "0.00",
+        currency: data.debitCurrency || data.creditCurrency || "ETB",
+        date: dateVal,
+        reference: data.id || cleanId,
+        receipt_url: data.encodedReceipt || `https://mbreciept.cbe.com.et/${cleanId}`,
+        raw_details: data
+      };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async verify(input: string, options: ProviderOptions = {}): Promise<any> {
+    const clean = input ? input.trim() : "";
+
+    // 1. Check for token in URL or input (e.g. v2-XXXX or direct token)
+    const tokenMatch = clean.match(/(v2-[A-Za-z0-9_-]+)/i) || clean.match(/\/receipt\/([A-Za-z0-9_-]+)/i) || (clean.startsWith("v2-") ? [clean, clean] : null);
+    if (tokenMatch && tokenMatch[1]) {
+      const directApiResult = await this.fetchCbeDirectApi(tokenMatch[1], options);
+      if (directApiResult && directApiResult.verified) {
+        return {
+          status: "Verified",
+          success: true,
+          message: "Transaction Verified Successfully via Commercial Bank of Ethiopia!",
+          data: directApiResult
+        };
+      }
+    }
+
+    // 2. Delegate to standard BaseReceiptProvider verification (direct page parse + master gateway)
+    const standardRes = await super.verify(input, options);
+    if (standardRes.success && standardRes.data) {
+      return standardRes;
+    }
+
+    // 3. If standard didn't find and token is present, retry token directly
+    if (tokenMatch && tokenMatch[0]) {
+      const retryApi = await this.fetchCbeDirectApi(tokenMatch[0], options);
+      if (retryApi && retryApi.verified) {
+        return {
+          status: "Verified",
+          success: true,
+          message: "Transaction Verified Successfully via Commercial Bank of Ethiopia!",
+          data: retryApi
+        };
+      }
+    }
+
+    return standardRes;
+  }
+
   parseReceipt(content: string, url: string, options?: ProviderOptions): NormalizedReceiptData | null {
     if (!content) return null;
 

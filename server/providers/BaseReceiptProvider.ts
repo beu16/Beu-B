@@ -161,7 +161,7 @@ export abstract class BaseReceiptProvider {
   }
 
   /**
-   * Fallback gateway verification using Master API with parallel character candidate variations.
+   * Fallback gateway verification using Master API with sequential primary test and parallel candidate variations.
    */
   async verifyViaMasterGateway(input: string, options: ProviderOptions = {}): Promise<NormalizedReceiptData | null> {
     try {
@@ -170,7 +170,7 @@ export abstract class BaseReceiptProvider {
 
       if (candidates.length === 0) return null;
 
-      const requests = candidates.map(async (cleanRef) => {
+      const executeGatewayQuery = async (cleanRef: string): Promise<NormalizedReceiptData | null> => {
         try {
           const payload: any = {
             bank: this.bankCode.toLowerCase(),
@@ -181,9 +181,9 @@ export abstract class BaseReceiptProvider {
           };
 
           const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), 4000);
+          const timer = setTimeout(() => controller.abort(), 6000);
 
-          const response = await fetch(`https://verify.et/api/verify?waitMs=1000`, {
+          const response = await fetch(`https://verify.et/api/verify?waitMs=3000`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -193,28 +193,63 @@ export abstract class BaseReceiptProvider {
             signal: controller.signal
           }).finally(() => clearTimeout(timer));
 
-          if (!response.ok) return null;
+          if (!response.ok && response.status !== 202) return null;
 
-          const resData = await response.json();
+          let resData: any = await response.json().catch(() => null);
           if (!resData || !resData.success) return null;
 
-          const v = resData.verification || {};
-          const items = Array.isArray(resData.data) ? resData.data : [resData.data || {}];
-          const item = items[0] || {};
-          const resultObj = v.result || item.result || item || {};
+          let v = resData.verification || {};
+          let items = Array.isArray(resData.data) ? resData.data : [resData.data || {}];
+          let item = items[0] || {};
+          let resultObj = v.result || item.result || item || {};
 
-          const isVerified = Boolean(
+          let isVerified = Boolean(
             resData.verified ||
             v.verified ||
             item.verified ||
             (resData.success && (v.status === "success" || item.status === "success" || resData.status === "success"))
           );
 
+          // If queued / pending, poll status endpoint
+          const requestId = resData.requestId || v.requestId;
+          if (!isVerified && requestId) {
+            const statusUrl = `https://verify.et/api/verify/${requestId}`;
+            for (let attempt = 0; attempt < 7; attempt++) {
+              await new Promise(r => setTimeout(r, 500));
+              try {
+                const pollRes = await fetch(statusUrl, {
+                  headers: { "x-api-key": apiKey }
+                });
+                if (pollRes.ok) {
+                  const pollData: any = await pollRes.json();
+                  const pv = pollData.verification || {};
+                  const pItem = Array.isArray(pollData.data) ? pollData.data[0] : (pollData.data || {});
+                  if (
+                    pv.processingStatus === "completed" ||
+                    pv.verified ||
+                    pollData.verified ||
+                    pv.status === "success" ||
+                    pItem.verified ||
+                    pItem.status === "success"
+                  ) {
+                    resData = pollData;
+                    v = pv;
+                    resultObj = pv.result || pItem.result || pItem || {};
+                    isVerified = true;
+                    break;
+                  }
+                }
+              } catch {
+                // ignore transient polling error
+              }
+            }
+          }
+
           if (!isVerified) return null;
 
-          const txId = resultObj.transactionNumber || resultObj.receiptNumber || resultObj.reference || cleanRef;
-          let rawPayer = resultObj.senderName || resultObj.bankSpecific?.payerName || resultObj.payer || "";
-          let rawReceiver = resultObj.receiverName || resultObj.bankSpecific?.creditedPartyName || resultObj.payee || "";
+          const txId = resultObj.transactionNumber || resultObj.receiptNumber || resultObj.referenceNumber || resultObj.reference || cleanRef;
+          let rawPayer = resultObj.senderName || resultObj.bankSpecific?.payerName || resultObj.bankSpecific?.senderName || resultObj.payer || "";
+          let rawReceiver = resultObj.receiverName || resultObj.bankSpecific?.creditedPartyName || resultObj.bankSpecific?.receiverName || resultObj.payee || "";
           
           if (this.isNoise(rawPayer)) rawPayer = "";
           if (this.isNoise(rawReceiver)) rawReceiver = "";
@@ -222,12 +257,19 @@ export abstract class BaseReceiptProvider {
           const finalPayer = this.cleanString(rawPayer) || options.extractedPayer || (options.phoneNumber ? `Customer (${options.phoneNumber})` : "Bank Customer");
           const finalReceiver = this.cleanString(rawReceiver) || options.extractedReceiver || options.expectedReceiver || "Merchant";
           
-          let parsedAmountNum = this.parseAmountNumber(resultObj.amount || resultObj.settledAmountValue || resultObj.bankSpecific?.settledAmountValue || 0);
+          let parsedAmountNum = this.parseAmountNumber(
+            resultObj.amount ??
+            resultObj.settledAmountValue ??
+            resultObj.bankSpecific?.settledAmountValue ??
+            resultObj.bankSpecific?.amountValue ??
+            resultObj.bankSpecific?.totalPaidAmountValue ??
+            0
+          );
           if ((parsedAmountNum === 0 || parsedAmountNum === 1.25) && options.extractedAmount && options.extractedAmount > 0) {
             parsedAmountNum = options.extractedAmount;
           }
 
-          const dateVal = resultObj.timestamp || resultObj.bankSpecific?.paymentDateIsoUtc || resultObj.paymentDate || options.extractedDate || new Date().toISOString();
+          const dateVal = resultObj.timestamp || resultObj.bankSpecific?.paymentDateIsoUtc || resultObj.bankSpecific?.transactionDateIsoUtc || resultObj.paymentDate || options.extractedDate || new Date().toISOString();
 
           return {
             verified: true,
@@ -236,7 +278,7 @@ export abstract class BaseReceiptProvider {
             payer: finalPayer,
             receiver: finalReceiver,
             amount: parsedAmountNum > 0 ? parsedAmountNum.toFixed(2) : "0.00",
-            currency: "ETB",
+            currency: resultObj.currency || "ETB",
             date: dateVal,
             reference: txId,
             receipt_url: `https://verify.et/api/receipt/${txId}`,
@@ -245,11 +287,24 @@ export abstract class BaseReceiptProvider {
         } catch (e) {
           return null;
         }
-      });
+      };
 
-      const results = await Promise.all(requests);
-      const firstValid = results.find(r => r !== null && r?.verified);
-      return firstValid || null;
+      // 1. Try primary exact reference first
+      const primaryCandidate = candidates[0];
+      const primaryRes = await executeGatewayQuery(primaryCandidate);
+      if (primaryRes && primaryRes.verified) {
+        return primaryRes;
+      }
+
+      // 2. Try remaining candidate variations if any
+      const otherCandidates = candidates.slice(1);
+      if (otherCandidates.length > 0) {
+        const altResults = await Promise.all(otherCandidates.map(c => executeGatewayQuery(c)));
+        const firstValid = altResults.find(r => r !== null && r?.verified);
+        if (firstValid) return firstValid;
+      }
+
+      return null;
     } catch (e: any) {
       return null;
     }
